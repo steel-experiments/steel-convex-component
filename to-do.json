@@ -513,12 +513,12 @@
         "profiles",
         "v1.1"
       ],
-      "updated_at": "2026-03-02T09:35:58Z",
+      "updated_at": "2026-03-02T09:36:05Z",
       "details": "Implemented the profiles component actions with metadata reactivity and URL-based userDataDir handling. Added profile metadata table and local upsert behavior for profile list/get/createFromUrl/updateFromUrl flows.",
       "files": [
-        "src/component/schema.ts",
-        "src/component/profiles.ts",
         "src/client/index.ts",
+        "src/component/profiles.ts",
+        "src/component/schema.ts",
         "to-do.json"
       ]
     },
@@ -625,7 +625,7 @@
       "id": "T026",
       "title": "Wire example Convex app and usage samples",
       "priority": 3,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T025",
         "T004"
@@ -638,7 +638,14 @@
       "tags": [
         "example",
         "docs"
-      ]
+      ],
+      "updated_at": "2026-03-02T09:36:46Z",
+      "details": "Added example Convex schema and complete SteelComponent usage sample demonstrating ownerId propagation through create/refresh/release/list/get flow.",
+      "files": [
+        "example/convex/schema.ts",
+        "example/convex/steelExample.ts"
+      ],
+      "blockers": []
     },
     {
       "id": "T027",
