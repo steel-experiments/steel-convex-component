@@ -113,7 +113,7 @@
       "tags": [
         "packaging"
       ],
-      "updated_at": "2026-03-02T09:24:13Z",
+      "updated_at": "2026-03-02T09:24:18Z",
       "details": "Created package manifest with required dependencies, scripts, module type, and required exports for component consumers.",
       "files": [
         "package.json",
@@ -124,7 +124,7 @@
       "id": "T005",
       "title": "Define Convex schema for sessions with required indexes",
       "priority": 1,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T003"
       ],
@@ -136,6 +136,12 @@
       "tags": [
         "schema",
         "core"
+      ],
+      "updated_at": "2026-03-02T09:24:32Z",
+      "details": "Defined Convex schema for sessions table with status union, required timestamps/metadata fields, optional ownerId support, and byExternalId/byStatus/byCreatedAt (+byOwnerId) indexes.",
+      "files": [
+        "src/component/schema.ts",
+        "to-do.json"
       ]
     },
     {
