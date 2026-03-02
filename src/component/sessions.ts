@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
 import {
+  normalizeError,
   normalizeIncludeRaw,
   normalizeOwnerId,
   normalizeSessionStatus,
@@ -98,6 +99,25 @@ const pickFirstBoolean = (value: JsonObject, keys: string[]): boolean | undefine
   return undefined;
 };
 
+const normalizeWithError = <T>(operation: string, handler: () => T): T => {
+  try {
+    return handler();
+  } catch (error) {
+    throw normalizeError(error, operation);
+  }
+};
+
+const runWithNormalizedError = async <T>(
+  operation: string,
+  handler: () => Promise<T>,
+): Promise<T> => {
+  try {
+    return await handler();
+  } catch (error) {
+    throw normalizeError(error, operation);
+  }
+};
+
 const normalizeCreatePayload = (
   payload: JsonObject,
   ownerId: string,
@@ -108,7 +128,7 @@ const normalizeCreatePayload = (
     pickFirstString(payload, ["externalId", "sessionExternalId", "sessionId", "id"]) ??
     undefined;
   if (!externalId) {
-    throw new Error("Create response missing externalId");
+    throw normalizeError("Create response missing externalId", "sessions.create");
   }
 
   const status = normalizeSessionStatus(
@@ -153,7 +173,7 @@ const normalizeCreatePayload = (
 const normalizeSessionRecord = (session: RawSessionRecord): UpsertSessionArgs => {
   const ownerId = normalizeOwnerId(session.ownerId);
   if (!ownerId) {
-    throw new Error("Session record missing ownerId");
+    throw normalizeError("Session record missing ownerId", "sessions.record");
   }
 
   return {
@@ -215,7 +235,10 @@ const upsertSession = internalMutation({
       .unique();
 
     if (current && current.ownerId && current.ownerId !== args.ownerId) {
-      throw new Error("ownerId mismatch for existing local session record");
+      throw normalizeError(
+        "ownerId mismatch for existing local session record",
+        "sessions.upsert",
+      );
     }
 
     if (current !== null) {
@@ -238,23 +261,35 @@ export const sessions = {
     handler: async (ctx, args) => {
       const ownerId = normalizeOwnerId(args.ownerId);
       if (!ownerId) {
-        throw new Error("Missing ownerId: ownerId is required for sessions.create");
+        throw normalizeError(
+          "Missing ownerId: ownerId is required for sessions.create",
+          "sessions.create",
+        );
       }
 
-      const steel = createSteelClient({ apiKey: args.apiKey });
+      const steel = createSteelClient(
+        { apiKey: args.apiKey },
+        { operation: "sessions.create" },
+      );
       const sessionInput = args.sessionArgs ?? {};
 
-      const rawSession = await steel.sessions.create(sessionInput as Record<string, unknown>);
+      const rawSession = await runWithNormalizedError("sessions.create", () =>
+        steel.sessions.create(sessionInput as Record<string, unknown>),
+      );
       if (!rawSession || typeof rawSession !== "object") {
-        throw new Error("Invalid response from Steel sessions.create");
+        throw normalizeError("Invalid response from Steel sessions.create", "sessions.create");
       }
 
-      const normalizedSession = normalizeCreatePayload(
-        rawSession as JsonObject,
-        ownerId,
-        normalizeIncludeRaw(args.includeRaw),
+      const normalizedSession = normalizeWithError("sessions.create", () =>
+        normalizeCreatePayload(
+          rawSession as JsonObject,
+          ownerId,
+          normalizeIncludeRaw(args.includeRaw),
+        ),
       );
-      await ctx.runMutation(internal.sessions.upsert, normalizedSession);
+      await runWithNormalizedError("sessions.upsert", () =>
+        ctx.runMutation(internal.sessions.upsert, normalizedSession),
+      );
 
       return normalizedSession;
     },
@@ -269,21 +304,33 @@ export const sessions = {
     handler: async (ctx, args) => {
       const ownerId = normalizeOwnerId(args.ownerId);
       if (!ownerId) {
-        throw new Error("Missing ownerId: ownerId is required for sessions.refresh");
+        throw normalizeError(
+          "Missing ownerId: ownerId is required for sessions.refresh",
+          "sessions.refresh",
+        );
       }
 
-      const steel = createSteelClient({ apiKey: args.apiKey });
-      const rawSession = await steel.sessions.get(args.externalId);
-      if (!rawSession || typeof rawSession !== "object") {
-        throw new Error("Invalid response from Steel sessions.get");
-      }
-
-      const normalizedSession = normalizeCreatePayload(
-        rawSession as JsonObject,
-        ownerId,
-        normalizeIncludeRaw(args.includeRaw),
+      const steel = createSteelClient(
+        { apiKey: args.apiKey },
+        { operation: "sessions.refresh" },
       );
-      await ctx.runMutation(internal.sessions.upsert, normalizedSession);
+      const rawSession = await runWithNormalizedError("sessions.refresh", () =>
+        steel.sessions.get(args.externalId),
+      );
+      if (!rawSession || typeof rawSession !== "object") {
+        throw normalizeError("Invalid response from Steel sessions.get", "sessions.refresh");
+      }
+
+      const normalizedSession = normalizeWithError("sessions.refresh", () =>
+        normalizeCreatePayload(
+          rawSession as JsonObject,
+          ownerId,
+          normalizeIncludeRaw(args.includeRaw),
+        ),
+      );
+      await runWithNormalizedError("sessions.upsert", () =>
+        ctx.runMutation(internal.sessions.upsert, normalizedSession),
+      );
 
       return normalizedSession;
     },
@@ -302,11 +349,11 @@ export const sessions = {
       if (args.ownerId) {
         const ownerId = normalizeOwnerId(args.ownerId);
         if (!ownerId || session.ownerId !== ownerId) {
-          throw new Error("ownerId mismatch for session query");
+          throw normalizeError("ownerId mismatch for session query", "sessions.get");
         }
       }
 
-      return normalizeSessionRecord(session);
+      return normalizeWithError("sessions.get", () => normalizeSessionRecord(session));
     },
   }),
   getByExternalId: query({
@@ -327,11 +374,16 @@ export const sessions = {
       if (args.ownerId) {
         const ownerId = normalizeOwnerId(args.ownerId);
         if (!ownerId || session.ownerId !== ownerId) {
-          throw new Error("ownerId mismatch for session query");
+          throw normalizeError(
+            "ownerId mismatch for session query",
+            "sessions.getByExternalId",
+          );
         }
       }
 
-      return normalizeSessionRecord(session);
+      return normalizeWithError("sessions.getByExternalId", () =>
+        normalizeSessionRecord(session),
+      );
     },
   }),
   list: query({
@@ -361,7 +413,9 @@ export const sessions = {
       });
 
       return {
-        items: page.page.map((session) => normalizeSessionRecord(session)),
+        items: page.page.map((session) =>
+          normalizeWithError("sessions.list", () => normalizeSessionRecord(session)),
+        ),
         hasMore: !page.isDone,
         continuation: page.isDone ? undefined : page.continueCursor,
       };

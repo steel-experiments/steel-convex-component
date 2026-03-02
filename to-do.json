@@ -199,7 +199,7 @@
       "id": "T008",
       "title": "Add structured error normalization utility",
       "priority": 2,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T007"
       ],
@@ -211,6 +211,13 @@
       "tags": [
         "errors",
         "resilience"
+      ],
+      "updated_at": "2026-03-02T09:28:52Z",
+      "details": "Added shared structured error normalization utility and applied it across sessions client and action paths so component errors consistently include provider/message/status/code/retryable/operation. Added support for preserving upstream status/code and retryability hints.",
+      "files": [
+        "src/component/normalize.ts",
+        "src/component/steel.ts",
+        "src/component/sessions.ts"
       ]
     },
     {
@@ -307,9 +314,10 @@
         "sessions",
         "sync"
       ],
-      "updated_at": "2026-03-02T09:28:16Z",
+      "updated_at": "2026-03-02T09:28:22Z",
       "files": [
-        "src/component/sessions.ts"
+        "src/component/sessions.ts",
+        "to-do.json"
       ],
       "details": "Implemented sessions.refresh action with ownerId enforcement, remote per-session state fetch, normalization, and local upsert reconciliation."
     },
