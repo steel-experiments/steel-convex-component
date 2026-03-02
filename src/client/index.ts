@@ -34,6 +34,12 @@ interface SteelComponentFunctions {
     solve: unknown;
     solveImage: unknown;
   };
+  profiles: {
+    list: unknown;
+    get: unknown;
+    createFromUrl: unknown;
+    updateFromUrl: unknown;
+  };
   sessionFiles: {
     list: unknown;
     uploadFromUrl: unknown;
@@ -109,6 +115,22 @@ export interface SteelCaptchaState {
   isSolvingCaptcha: boolean;
   lastUpdated?: number;
   ownerId: string;
+}
+
+export interface SteelProfileMetadata {
+  externalId: string;
+  name?: string;
+  userDataDir?: string;
+  description?: string;
+  raw?: unknown;
+  ownerId: string;
+  lastSyncedAt: number;
+}
+
+export interface SteelProfileListResult {
+  items: SteelProfileMetadata[];
+  hasMore: boolean;
+  continuation?: string;
 }
 
 export interface SteelSessionFileListResult {
@@ -215,6 +237,30 @@ export interface SteelComponentCaptchaSolveArgs {
   pageId: string;
   ownerId: string;
   commandArgs?: Record<string, unknown>;
+}
+
+export interface SteelComponentProfileListArgs {
+  ownerId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface SteelComponentProfileGetArgs {
+  externalId: string;
+  ownerId: string;
+}
+
+export interface SteelComponentProfileCreateFromUrlArgs {
+  ownerId: string;
+  userDataDirUrl: string;
+  profileArgs?: Record<string, unknown>;
+}
+
+export interface SteelComponentProfileUpdateFromUrlArgs {
+  externalId: string;
+  ownerId: string;
+  userDataDirUrl?: string;
+  profileArgs?: Record<string, unknown>;
 }
 
 export class SteelComponent {
@@ -527,6 +573,53 @@ export class SteelComponent {
       this.runAction<SteelComponentCaptchaSolveArgs, unknown>(
         ctx,
         this.component.captchas.solveImage,
+        args,
+        options,
+      ),
+  };
+
+  public readonly profiles = {
+    list: (
+      ctx: SteelComponentContext,
+      args: SteelComponentProfileListArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentProfileListArgs, SteelProfileListResult>(
+        ctx,
+        this.component.profiles.list,
+        args,
+        options,
+      ),
+    get: (
+      ctx: SteelComponentContext,
+      args: SteelComponentProfileGetArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentProfileGetArgs, SteelProfileMetadata>(
+        ctx,
+        this.component.profiles.get,
+        args,
+        options,
+      ),
+    createFromUrl: (
+      ctx: SteelComponentContext,
+      args: SteelComponentProfileCreateFromUrlArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentProfileCreateFromUrlArgs, SteelProfileMetadata>(
+        ctx,
+        this.component.profiles.createFromUrl,
+        args,
+        options,
+      ),
+    updateFromUrl: (
+      ctx: SteelComponentContext,
+      args: SteelComponentProfileUpdateFromUrlArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentProfileUpdateFromUrlArgs, SteelProfileMetadata>(
+        ctx,
+        this.component.profiles.updateFromUrl,
         args,
         options,
       ),

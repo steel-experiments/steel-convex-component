@@ -66,4 +66,15 @@ export const schema = defineSchema({
   })
     .index("bySessionExternalId", ["sessionExternalId"])
     .index("bySessionExternalIdAndPageId", ["sessionExternalId", "pageId"]),
+  profiles: defineTable({
+    externalId: vString,
+    name: vOptionalString,
+    userDataDir: vOptionalString,
+    description: vOptionalString,
+    raw: v.optional(v.any()),
+    ownerId: vOwnerId,
+    lastSyncedAt: vNumber,
+  })
+    .index("byExternalId", ["externalId"])
+    .index("byOwnerId", ["ownerId"]),
 });

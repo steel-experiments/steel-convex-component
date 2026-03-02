@@ -487,11 +487,12 @@
         "captchas",
         "v1"
       ],
-      "updated_at": "2026-03-02T09:34:57Z",
+      "updated_at": "2026-03-02T09:35:14Z",
       "files": [
-        "src/component/schema.ts",
+        "src/client/index.ts",
         "src/component/captchas.ts",
-        "src/client/index.ts"
+        "src/component/schema.ts",
+        "to-do.json"
       ],
       "details": "Implement captchaStates table and captcha actions (status, solve, solveImage) with optional status snapshot persistence."
     },
@@ -499,7 +500,7 @@
       "id": "T020",
       "title": "Create profiles module with metadata handling",
       "priority": 3,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T007"
       ],
@@ -511,6 +512,14 @@
       "tags": [
         "profiles",
         "v1.1"
+      ],
+      "updated_at": "2026-03-02T09:35:58Z",
+      "details": "Implemented the profiles component actions with metadata reactivity and URL-based userDataDir handling. Added profile metadata table and local upsert behavior for profile list/get/createFromUrl/updateFromUrl flows.",
+      "files": [
+        "src/component/schema.ts",
+        "src/component/profiles.ts",
+        "src/client/index.ts",
+        "to-do.json"
       ]
     },
     {
