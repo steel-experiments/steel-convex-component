@@ -340,7 +340,7 @@
         "sync",
         "bulk"
       ],
-      "updated_at": "2026-03-02T09:29:26Z",
+      "updated_at": "2026-03-02T09:29:30Z",
       "details": "Implemented sessions.refreshMany as a bulk reconciliation action with optional status/cursor/limit filtering, per-item partial success handling, and continuation passthrough from Steel pagination responses",
       "files": [
         "src/component/sessions.ts",
@@ -351,7 +351,7 @@
       "id": "T014",
       "title": "Implement sessions.release and sessions.releaseAll",
       "priority": 2,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T012"
       ],
@@ -363,7 +363,12 @@
       "tags": [
         "sessions",
         "lifecycle"
-      ]
+      ],
+      "updated_at": "2026-03-02T09:29:59Z",
+      "files": [
+        "src/component/sessions.ts"
+      ],
+      "details": "Implemented sessions.release and sessions.releaseAll with idempotent handling, status synchronization, and optional ownerId/status scoped bulk release."
     },
     {
       "id": "T015",
