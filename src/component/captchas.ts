@@ -1,5 +1,6 @@
 // Placeholder module for captcha actions.
 import { action, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
@@ -21,7 +22,6 @@ interface CaptchaStatusArgs {
   url: string;
   isSolvingCaptcha: boolean;
   lastUpdated: number;
-  ownerId: string;
 }
 
 const requireOwnerId = (ownerId: string | undefined, operation: string): string => {
@@ -287,3 +287,8 @@ export const captchas = {
   }),
   upsert: upsertCaptchaState,
 };
+
+export const status = captchas.status;
+export const solve = captchas.solve;
+export const solveImage = captchas.solveImage;
+export const upsert = captchas.upsert;

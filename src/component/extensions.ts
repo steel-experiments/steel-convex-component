@@ -1,4 +1,5 @@
 import { action, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
@@ -515,7 +516,7 @@ export const extensions = {
       const result = await callExtensionsDeleteAll(steel);
 
       await runWithNormalizedError("extensions.deleteAll", () =>
-        _ctx.runMutation(internal.extensions.deleteAll, {
+        _ctx.runMutation(internal.extensions.deleteAllForOwner, {
           ownerId,
         }),
       );
@@ -527,3 +528,14 @@ export const extensions = {
   deleteOne: deleteExtensionMetadata,
   deleteAllForOwner: deleteAllExtensionMetadata,
 };
+
+const extensionsDelete = extensions.delete;
+
+export const list = extensions.list;
+export const uploadFromUrl = extensions.uploadFromUrl;
+export const updateFromUrl = extensions.updateFromUrl;
+export { extensionsDelete as delete };
+export const deleteAll = extensions.deleteAll;
+export const upsert = extensions.upsert;
+export const deleteOne = extensions.deleteOne;
+export const deleteAllForOwner = extensions.deleteAllForOwner;

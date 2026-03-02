@@ -1,4 +1,5 @@
-import { action, internal, internalMutation } from "./_generated/server";
+import { action, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
@@ -440,3 +441,12 @@ export const files = {
   upsert: upsertGlobalFileMetadata,
   deleteOne: deleteGlobalFileMetadata,
 };
+
+const filesDelete = files.delete;
+
+export const list = files.list;
+export const uploadFromUrl = files.uploadFromUrl;
+export { filesDelete as delete };
+export const downloadToStorage = files.downloadToStorage;
+export const upsert = files.upsert;
+export const deleteOne = files.deleteOne;

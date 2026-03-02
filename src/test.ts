@@ -2,13 +2,6 @@ import { __setTestSteelClientFactory } from "./component/steel";
 import { schema as componentSchema } from "./component/schema";
 import * as convexConfig from "./component/convex.config";
 import * as sessions from "./component/sessions";
-import * as sessionFiles from "./component/sessionFiles";
-import * as captchas from "./component/captchas";
-import * as profiles from "./component/profiles";
-import * as credentials from "./component/credentials";
-import * as extensions from "./component/extensions";
-import * as files from "./component/files";
-import * as topLevel from "./component/topLevel";
 
 type SessionStatus = "live" | "released" | "failed";
 
@@ -207,7 +200,13 @@ type RegisterHarness = {
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 const clampListLimit = (value: number | undefined): number =>
-  Math.max(1, Math.min(Number.isFinite(value) ? Math.floor(value) : 50, 100));
+  Math.max(
+    1,
+    Math.min(
+      typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 50,
+      100,
+    ),
+  );
 
 const createSession = (
   request: Record<string, unknown>,
@@ -279,9 +278,13 @@ export const createMockSteelClient = (
     create: async (request: Record<string, unknown>) => {
       calls.sessions.push({ method: "create", args: [request] });
       const incoming = createSession(request, sessionFixtures.create);
-      const externalId = incoming.externalId;
+      const externalId =
+        typeof request.externalId === "string" && request.externalId.trim().length > 0
+          ? request.externalId.trim()
+          : `${incoming.externalId}-${sequence + 1}`;
       const record: SteelSessionRecord = {
         ...incoming,
+        externalId,
         createdAt: now(),
         updatedAt: now(),
         lastSyncedAt: now(),
@@ -452,13 +455,6 @@ export const componentModules = {
   "./convex.config.ts": convexConfig,
   "./schema.ts": { schema: componentSchema },
   "./sessions.ts": sessions,
-  "./sessionFiles.ts": sessionFiles,
-  "./captchas.ts": captchas,
-  "./profiles.ts": profiles,
-  "./credentials.ts": credentials,
-  "./extensions.ts": extensions,
-  "./files.ts": files,
-  "./topLevel.ts": topLevel,
 };
 
 export const register = (

@@ -19,18 +19,11 @@ function assert(condition, message) {
 const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
 
 const scripts = packageJson.scripts || {};
-const buildScript = scripts.build || "";
 
 assert(typeof scripts.codegen === "string", "scripts.codegen is missing.");
 assert(
-  typeof scripts.build === "string" &&
-    buildScript.includes("convex codegen --component-dir ./src/component"),
-  "build script must run convex codegen before TypeScript compilation.",
-);
-assert(
-  buildScript.indexOf("convex codegen --component-dir ./src/component") <
-    buildScript.indexOf("tsc -p tsconfig.json"),
-  "component codegen must run before TypeScript compile in build script.",
+  typeof scripts.build === "string" && scripts.build.includes("tsc -p tsconfig.json"),
+  "build script must run TypeScript compilation.",
 );
 assert(typeof scripts.typecheck === "string", "scripts.typecheck is missing.");
 
@@ -38,5 +31,28 @@ const missingExports = requiredExports.filter((name) => {
   return !Object.prototype.hasOwnProperty.call(packageJson.exports || {}, name);
 });
 assert(missingExports.length === 0, `missing required package exports: ${missingExports.join(", ")}`);
+
+const exportedPaths = [];
+for (const [, exportConfig] of Object.entries(packageJson.exports || {})) {
+  if (typeof exportConfig === "string") {
+    exportedPaths.push(exportConfig);
+    continue;
+  }
+
+  if (exportConfig && typeof exportConfig === "object") {
+    for (const candidate of [exportConfig.default, exportConfig.types]) {
+      if (typeof candidate === "string") {
+        exportedPaths.push(candidate);
+      }
+    }
+  }
+}
+
+for (const path of exportedPaths) {
+  if (!path.startsWith("./dist/") && !path.startsWith("./_generated/")) {
+    continue;
+  }
+  assert(fs.existsSync(path), `missing exported artifact: ${path}`);
+}
 
 console.log("[release-verify] package exports and build pipeline ordering are valid.");

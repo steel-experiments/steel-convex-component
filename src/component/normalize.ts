@@ -127,7 +127,7 @@ export class StructuredError extends Error {
     this.operation = details.operation;
   }
 
-  override toJSON() {
+  toJSON() {
     return {
       provider: this.provider,
       message: this.message,
@@ -168,7 +168,7 @@ import { sessionStatusValues, type SessionStatus } from "./schema";
 const sessionStatusLookup = new Set(sessionStatusValues);
 
 export function normalizeSessionStatus(status: string): SessionStatus {
-  if (!sessionStatusLookup.has(status)) {
+  if (!sessionStatusLookup.has(status as SessionStatus)) {
     throw new Error(`Invalid session status: ${status}`);
   }
 

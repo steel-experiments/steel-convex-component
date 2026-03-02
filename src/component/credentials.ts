@@ -1,4 +1,5 @@
 import { action, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
@@ -504,3 +505,12 @@ export const credentials = {
   upsert: upsertCredentialMetadata,
   remove: deleteCredentialMetadata,
 };
+
+const credentialsDelete = credentials.delete;
+
+export const create = credentials.create;
+export const update = credentials.update;
+export const list = credentials.list;
+export { credentialsDelete as delete };
+export const upsert = credentials.upsert;
+export const remove = credentials.remove;

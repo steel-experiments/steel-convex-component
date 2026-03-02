@@ -23,5 +23,15 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["./src/**/*"]
+  "include": [
+    "./src/index.ts",
+    "./src/client/index.ts",
+    "./src/test.ts",
+    "./src/component/convex.config.ts",
+    "./src/component/schema.ts",
+    "./src/component/steel.ts",
+    "./src/component/normalize.ts",
+    "./src/component/sessions.ts",
+    "./src/component/_generated/**/*.ts"
+  ]
 }

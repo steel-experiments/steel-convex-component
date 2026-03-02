@@ -15,12 +15,19 @@ export type FunctionPath = {
   udfPath: string;
 };
 
-const componentModules = import.meta.glob("../src/component/**/*.ts");
+const componentModules = import.meta.glob(
+  "../src/component/{sessions,schema,convex.config,_generated/api,_generated/server,_generated/dataModel}.ts",
+);
+const appModules = import.meta.glob("../example/convex/**/*.ts");
+const testModules = { ...appModules, ...componentModules };
 
 export const createSteelTestHarness = (): TestConvex<
   SchemaDefinition<GenericSchema, boolean>
 > => {
-  const t = convexTest<SchemaDefinition<GenericSchema, boolean>>(appSchema as SchemaDefinition<GenericSchema, boolean>);
+  const t = convexTest<SchemaDefinition<GenericSchema, boolean>>(
+    appSchema as SchemaDefinition<GenericSchema, boolean>,
+    testModules,
+  );
   t.registerComponent("steel", componentSchema, componentModules);
   return t;
 };

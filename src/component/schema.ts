@@ -16,7 +16,7 @@ export const vNumber = v.number();
 export const vOptionalNumber = v.optional(v.number());
 export const vBoolean = v.boolean();
 export const vOptionalBoolean = v.optional(v.boolean());
-export const vOwnerId = vOptionalString;
+export const vOwnerId = vString;
 export const vIncludeRaw = vOptionalBoolean;
 
 export const schema = defineSchema({
@@ -45,77 +45,5 @@ export const schema = defineSchema({
     .index("byExternalId", ["externalId"])
     .index("byStatus", ["status"])
     .index("byCreatedAt", ["createdAt"])
-    .index("byOwnerId", ["ownerId"]),
-  sessionFileMetadata: defineTable({
-    sessionExternalId: vString,
-    path: vString,
-    size: vNumber,
-    lastModified: vNumber,
-    lastSyncedAt: vNumber,
-    ownerId: vOwnerId,
-  })
-    .index("bySessionExternalId", ["sessionExternalId"])
-    .index("bySessionExternalIdAndPath", ["sessionExternalId", "path"]),
-  globalFiles: defineTable({
-    externalId: vString,
-    ownerId: v.string(),
-    name: vOptionalString,
-    path: vOptionalString,
-    size: vOptionalNumber,
-    lastModified: vOptionalNumber,
-    sourceUrl: vOptionalString,
-    mimeType: vOptionalString,
-    lastSyncedAt: vNumber,
-  })
-    .index("byExternalId", ["externalId"])
-    .index("byOwnerId", ["ownerId"]),
-  captchaStates: defineTable({
-    sessionExternalId: vString,
-    pageId: vString,
-    url: vString,
-    isSolvingCaptcha: vBoolean,
-    lastUpdated: vOptionalNumber,
-    ownerId: vOwnerId,
-  })
-    .index("bySessionExternalId", ["sessionExternalId"])
-    .index("bySessionExternalIdAndPageId", ["sessionExternalId", "pageId"]),
-  extensions: defineTable({
-    externalId: vString,
-    name: vOptionalString,
-    version: vOptionalString,
-    description: vOptionalString,
-    sourceUrl: vOptionalString,
-    checksum: vOptionalString,
-    enabled: vOptionalBoolean,
-    ownerId: v.string(),
-    lastSyncedAt: vNumber,
-  })
-    .index("byExternalId", ["externalId"])
-    .index("byOwnerId", ["ownerId"]),
-  profiles: defineTable({
-    externalId: vString,
-    name: vOptionalString,
-    userDataDir: vOptionalString,
-    description: vOptionalString,
-    raw: v.optional(v.any()),
-    ownerId: vOwnerId,
-    lastSyncedAt: vNumber,
-  })
-    .index("byExternalId", ["externalId"])
-    .index("byOwnerId", ["ownerId"]),
-  credentials: defineTable({
-    externalId: vString,
-    name: vOptionalString,
-    service: vOptionalString,
-    type: vOptionalString,
-    username: vOptionalString,
-    description: vOptionalString,
-    metadata: v.optional(v.record(v.string(), v.any())),
-    createdAt: vOptionalNumber,
-    updatedAt: vOptionalNumber,
-    ownerId: v.string(),
-    lastSyncedAt: vNumber,
-  })
-    .index("byExternalId", ["externalId"])
     .index("byOwnerId", ["ownerId"]),
 });

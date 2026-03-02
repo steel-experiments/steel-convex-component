@@ -11,15 +11,9 @@ export interface SteelComponentApiArgs {
 export interface SteelComponentContext {
   runAction<TArgs, TResult>(action: unknown, args: TArgs): Promise<TResult>;
   runQuery<TArgs, TResult>(query: unknown, args: TArgs): Promise<TResult>;
-  runMutation<TArgs, TResult>(mutation: unknown, args: TArgs): Promise<TResult>;
 }
 
 interface SteelComponentFunctions {
-  steel: {
-    screenshot: unknown;
-    scrape: unknown;
-    pdf: unknown;
-  };
   sessions: {
     create: unknown;
     refresh: unknown;
@@ -29,46 +23,6 @@ interface SteelComponentFunctions {
     get: unknown;
     getByExternalId: unknown;
     list: unknown;
-    computer: unknown;
-    context: unknown;
-    liveDetails: unknown;
-    events: unknown;
-  };
-  captchas: {
-    status: unknown;
-    solve: unknown;
-    solveImage: unknown;
-  };
-  profiles: {
-    list: unknown;
-    get: unknown;
-    createFromUrl: unknown;
-    updateFromUrl: unknown;
-  };
-  files: {
-    list: unknown;
-    uploadFromUrl: unknown;
-    delete: unknown;
-    downloadToStorage: unknown;
-  };
-  credentials: {
-    create: unknown;
-    update: unknown;
-    list: unknown;
-    delete: unknown;
-  };
-  extensions: {
-    list: unknown;
-    uploadFromUrl: unknown;
-    updateFromUrl: unknown;
-    delete: unknown;
-    deleteAll: unknown;
-  };
-  sessionFiles: {
-    list: unknown;
-    uploadFromUrl: unknown;
-    delete: unknown;
-    deleteAll: unknown;
   };
 }
 
@@ -123,115 +77,37 @@ export interface SteelListResult {
   continuation?: string;
 }
 
-export interface SteelSessionFileRecord {
-  sessionExternalId: string;
-  path: string;
-  size: number;
-  lastModified: number;
-  ownerId?: string;
-  lastSyncedAt: number;
-}
-
-export interface SteelFileRecord {
-  externalId: string;
-  ownerId: string;
-  name?: string;
-  path?: string;
-  size?: number;
-  lastModified?: number;
-  sourceUrl?: string;
-  mimeType?: string;
-  lastSyncedAt: number;
-}
-
-export interface SteelCaptchaState {
-  sessionExternalId: string;
-  pageId: string;
-  url: string;
-  isSolvingCaptcha: boolean;
-  lastUpdated?: number;
-  ownerId: string;
-}
-
-export interface SteelProfileMetadata {
-  externalId: string;
-  name?: string;
-  userDataDir?: string;
-  description?: string;
-  raw?: unknown;
-  ownerId: string;
-  lastSyncedAt: number;
-}
-
-export interface SteelProfileListResult {
-  items: SteelProfileMetadata[];
-  hasMore: boolean;
-  continuation?: string;
-}
-
-export interface SteelCredentialMetadata {
-  externalId: string;
-  name?: string;
-  service?: string;
-  type?: string;
-  username?: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-  createdAt?: number;
-  updatedAt?: number;
-  ownerId: string;
-  lastSyncedAt: number;
-}
-
-export interface SteelCredentialListResult {
-  items: SteelCredentialMetadata[];
-  hasMore: boolean;
-  continuation?: string;
-}
-
-export interface SteelSessionFileListResult {
-  items: SteelSessionFileRecord[];
-  hasMore: boolean;
-  continuation?: string;
-}
-
-export interface SteelFileListResult {
-  items: SteelFileRecord[];
-  hasMore: boolean;
-  continuation?: string;
-}
-
 export interface SteelComponentSessionCreateArgs {
   sessionArgs?: Record<string, unknown>;
   includeRaw?: boolean;
-  ownerId: string;
+  ownerId?: string;
 }
 
 export interface SteelComponentSessionGetArgs {
   id: string;
-  ownerId: string;
+  ownerId?: string;
 }
 
 export interface SteelComponentSessionGetByExternalIdArgs {
   externalId: string;
-  ownerId: string;
+  ownerId?: string;
 }
 
 export interface SteelComponentSessionListArgs {
   status?: SteelSessionStatus;
-  ownerId: string;
+  ownerId?: string;
   cursor?: string;
   limit?: number;
 }
 
 export interface SteelComponentSessionRefreshArgs {
   externalId: string;
-  ownerId: string;
+  ownerId?: string;
   includeRaw?: boolean;
 }
 
 export interface SteelComponentSessionRefreshManyArgs {
-  ownerId: string;
+  ownerId?: string;
   status?: SteelSessionStatus;
   cursor?: string;
   limit?: number;
@@ -240,204 +116,14 @@ export interface SteelComponentSessionRefreshManyArgs {
 
 export interface SteelComponentSessionReleaseArgs {
   externalId: string;
-  ownerId: string;
+  ownerId?: string;
 }
 
 export interface SteelComponentSessionReleaseAllArgs {
-  ownerId: string;
+  ownerId?: string;
   status?: SteelSessionStatus;
   cursor?: string;
   limit?: number;
-}
-
-export interface SteelComponentSessionCommandArgs {
-  ownerId: string;
-  commandArgs: Record<string, unknown>;
-}
-
-export interface SteelComponentSessionLiveDetailsArgs {
-  ownerId: string;
-  commandArgs: Record<string, unknown>;
-  persistSnapshot?: boolean;
-}
-
-export interface SteelComponentSessionFileListArgs {
-  ownerId: string;
-  sessionExternalId: string;
-  cursor?: string;
-  limit?: number;
-}
-
-export interface SteelComponentSessionFileUploadArgs {
-  ownerId: string;
-  sessionExternalId: string;
-  url: string;
-  path?: string;
-  fileArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentSessionFileDeleteArgs {
-  ownerId: string;
-  sessionExternalId: string;
-  path: string;
-}
-
-export interface SteelComponentSessionFileDeleteAllArgs {
-  ownerId: string;
-  sessionExternalId: string;
-}
-
-export interface SteelComponentFileListArgs {
-  ownerId: string;
-  cursor?: string;
-  limit?: number;
-}
-
-export interface SteelComponentFileUploadFromUrlArgs {
-  ownerId: string;
-  url: string;
-  path?: string;
-  name?: string;
-  fileArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentFileDeleteArgs {
-  ownerId: string;
-  externalId: string;
-}
-
-export interface SteelComponentFileDownloadToStorageArgs {
-  ownerId: string;
-  externalId?: string;
-  url?: string;
-  fileArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentCaptchaStatusArgs {
-  sessionExternalId: string;
-  pageId: string;
-  persistSnapshot?: boolean;
-  ownerId: string;
-}
-
-export interface SteelComponentCaptchaSolveArgs {
-  sessionExternalId: string;
-  pageId: string;
-  ownerId: string;
-  commandArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentProfileListArgs {
-  ownerId: string;
-  cursor?: string;
-  limit?: number;
-}
-
-export interface SteelComponentProfileGetArgs {
-  externalId: string;
-  ownerId: string;
-}
-
-export interface SteelComponentProfileCreateFromUrlArgs {
-  ownerId: string;
-  userDataDirUrl: string;
-  profileArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentProfileUpdateFromUrlArgs {
-  externalId: string;
-  ownerId: string;
-  userDataDirUrl?: string;
-  profileArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentCredentialCreateArgs {
-  ownerId: string;
-  credentialArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentCredentialUpdateArgs {
-  externalId: string;
-  ownerId: string;
-  credentialArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentCredentialListArgs {
-  ownerId: string;
-  cursor?: string;
-  limit?: number;
-}
-
-export interface SteelComponentCredentialDeleteArgs {
-  externalId: string;
-  ownerId: string;
-}
-
-export interface SteelComponentTopLevelScreenshotArgs {
-  url: string;
-  ownerId: string;
-  timeout?: number;
-  commandArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentTopLevelScrapeArgs {
-  url: string;
-  ownerId: string;
-  timeout?: number;
-  commandArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentTopLevelPdfArgs {
-  url: string;
-  ownerId: string;
-  timeout?: number;
-  commandArgs?: Record<string, unknown>;
-}
-
-export interface SteelExtensionMetadata {
-  externalId: string;
-  ownerId: string;
-  lastSyncedAt: number;
-  name?: string;
-  version?: string;
-  description?: string;
-  sourceUrl?: string;
-  checksum?: string;
-  enabled?: boolean;
-}
-
-export interface SteelExtensionListResult {
-  items: SteelExtensionMetadata[];
-  hasMore: boolean;
-  continuation?: string;
-}
-
-export interface SteelComponentExtensionListArgs {
-  ownerId: string;
-  cursor?: string;
-  limit?: number;
-}
-
-export interface SteelComponentExtensionUploadFromUrlArgs {
-  ownerId: string;
-  url: string;
-  extensionArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentExtensionUpdateFromUrlArgs {
-  ownerId: string;
-  externalId: string;
-  url?: string;
-  extensionArgs?: Record<string, unknown>;
-}
-
-export interface SteelComponentExtensionDeleteArgs {
-  ownerId: string;
-  externalId: string;
-}
-
-export interface SteelComponentExtensionDeleteAllArgs {
-  ownerId: string;
 }
 
 export class SteelComponent {
@@ -453,125 +139,53 @@ export class SteelComponent {
         ?.env?.STEEL_API_KEY;
 
     const resolved = apiKey ?? wrapperOption ?? envOption;
-
     if (!resolved || !resolved.trim()) {
       throw new Error(
-        "Missing STEEL_API_KEY: pass a key via constructor options, `STEEL_API_KEY` env var, or method override.",
+        "Missing STEEL_API_KEY: pass via constructor options, env var, or method override.",
       );
     }
 
-    return resolved;
+    return resolved.trim();
   }
 
-  protected injectApiKey<TArgs extends Record<string, unknown>>(
-    args: TArgs,
-    apiKeyOverride?: string,
-  ): TArgs & { apiKey: string } {
-    return {
-      ...args,
-      apiKey: this.resolveApiKey(apiKeyOverride),
-    };
-  }
-
-  protected normalizeOwnerId(ownerId?: string): string {
-    if (typeof ownerId !== "string") {
-      return "";
-    }
-
-    const normalized = ownerId.trim();
-    return normalized.length ? normalized : "";
-  }
-
-  protected injectOwnerId<TArgs extends Record<string, unknown>>(
-    args: TArgs,
-    ownerId: string | undefined,
-    overrideOwnerId?: string,
-  ): TArgs & { ownerId: string } {
-    const resolvedOwnerId =
-      this.normalizeOwnerId(overrideOwnerId) ||
-      this.normalizeOwnerId(ownerId) ||
-      this.normalizeOwnerId((args as SteelComponentApiArgs).ownerId);
-
-    if (!resolvedOwnerId) {
+  protected resolveOwnerId(argsOwnerId?: string, overrideOwnerId?: string): string {
+    const candidate = overrideOwnerId ?? argsOwnerId ?? this.options.ownerId;
+    const normalized = candidate?.trim();
+    if (!normalized) {
       throw new Error(
-        "Missing ownerId: supply ownerId in method arguments or constructor options.",
+        "Missing ownerId: supply ownerId in method args, constructor options, or call options.",
       );
     }
 
-    return {
-      ...args,
-      ownerId: resolvedOwnerId,
-    };
+    return normalized;
   }
 
-  protected runAction<TArgs extends Record<string, unknown>, TResult>(
+  protected runAction<TArgs extends object, TResult>(
     ctx: SteelComponentContext,
-    action: unknown,
-    args: TArgs,
+    actionRef: unknown,
+    args: TArgs & SteelComponentApiArgs,
     options?: SteelComponentOptions,
   ): Promise<TResult> {
-    const argsWithOwnerId = this.injectOwnerId(args, this.options.ownerId, options?.ownerId);
-    return ctx.runAction<TArgs & SteelComponentApiArgs, TResult>(
-      action,
-      this.injectApiKey(argsWithOwnerId, options?.STEEL_API_KEY),
-    );
+    const ownerId = this.resolveOwnerId(args.ownerId, options?.ownerId);
+    return ctx.runAction<TArgs & { apiKey: string; ownerId: string }, TResult>(actionRef, {
+      ...(args as TArgs),
+      ownerId,
+      apiKey: this.resolveApiKey(options?.STEEL_API_KEY ?? args.apiKey),
+    });
   }
 
-  protected runQuery<TArgs extends Record<string, unknown>, TResult>(
+  protected runQuery<TArgs extends object, TResult>(
     ctx: SteelComponentContext,
-    query: unknown,
-    args: TArgs,
+    queryRef: unknown,
+    args: TArgs & SteelComponentApiArgs,
     options?: SteelComponentOptions,
   ): Promise<TResult> {
-    const argsWithOwnerId = this.injectOwnerId(args, this.options.ownerId, options?.ownerId);
-    return ctx.runQuery<TArgs & SteelComponentApiArgs, TResult>(query, argsWithOwnerId as TArgs);
+    const ownerId = this.resolveOwnerId(args.ownerId, options?.ownerId);
+    return ctx.runQuery<TArgs & { ownerId: string }, TResult>(queryRef, {
+      ...(args as TArgs),
+      ownerId,
+    });
   }
-
-  protected runMutation<TArgs extends Record<string, unknown>, TResult>(
-    ctx: SteelComponentContext,
-    mutation: unknown,
-    args: TArgs,
-    options?: SteelComponentOptions,
-  ): Promise<TResult> {
-    const argsWithOwnerId = this.injectOwnerId(args, this.options.ownerId, options?.ownerId);
-    return ctx.runMutation<TArgs & SteelComponentApiArgs, TResult>(mutation, argsWithOwnerId as TArgs);
-  }
-
-  public readonly steel = {
-    screenshot: (
-      ctx: SteelComponentContext,
-      args: SteelComponentTopLevelScreenshotArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentTopLevelScreenshotArgs, unknown>(
-        ctx,
-        this.component.steel.screenshot,
-        args,
-        options,
-      ),
-    scrape: (
-      ctx: SteelComponentContext,
-      args: SteelComponentTopLevelScrapeArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentTopLevelScrapeArgs, unknown>(
-        ctx,
-        this.component.steel.scrape,
-        args,
-        options,
-      ),
-    pdf: (
-      ctx: SteelComponentContext,
-      args: SteelComponentTopLevelPdfArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentTopLevelPdfArgs, unknown>(
-        ctx,
-        this.component.steel.pdf,
-        args,
-        options,
-      ),
-  };
 
   public readonly sessions = {
     create: (
@@ -607,6 +221,28 @@ export class SteelComponent {
         args,
         options,
       ),
+    release: (
+      ctx: SteelComponentContext,
+      args: SteelComponentSessionReleaseArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentSessionReleaseArgs, SteelSessionRecord>(
+        ctx,
+        this.component.sessions.release,
+        args,
+        options,
+      ),
+    releaseAll: (
+      ctx: SteelComponentContext,
+      args: SteelComponentSessionReleaseAllArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentSessionReleaseAllArgs, SteelReleaseAllResult>(
+        ctx,
+        this.component.sessions.releaseAll,
+        args,
+        options,
+      ),
     get: (
       ctx: SteelComponentContext,
       args: SteelComponentSessionGetArgs,
@@ -637,354 +273,6 @@ export class SteelComponent {
       this.runQuery<SteelComponentSessionListArgs, SteelListResult>(
         ctx,
         this.component.sessions.list,
-        args,
-        options,
-      ),
-    release: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionReleaseArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionReleaseArgs, SteelSessionRecord>(
-        ctx,
-        this.component.sessions.release,
-        args,
-        options,
-      ),
-    releaseAll: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionReleaseAllArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionReleaseAllArgs, SteelReleaseAllResult>(
-        ctx,
-        this.component.sessions.releaseAll,
-        args,
-        options,
-      ),
-    computer: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionCommandArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionCommandArgs, unknown>(
-        ctx,
-        this.component.sessions.computer,
-        args,
-        options,
-      ),
-    context: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionCommandArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionCommandArgs, unknown>(
-        ctx,
-        this.component.sessions.context,
-        args,
-        options,
-      ),
-    liveDetails: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionLiveDetailsArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionLiveDetailsArgs, unknown>(
-        ctx,
-        this.component.sessions.liveDetails,
-        args,
-        options,
-      ),
-  events: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionCommandArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionCommandArgs, unknown>(
-        ctx,
-        this.component.sessions.events,
-        args,
-        options,
-      ),
-  };
-
-  public readonly sessionFiles = {
-    list: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionFileListArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionFileListArgs, SteelSessionFileListResult>(
-        ctx,
-        this.component.sessionFiles.list,
-        args,
-        options,
-      ),
-    uploadFromUrl: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionFileUploadArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionFileUploadArgs, SteelSessionFileRecord | unknown>(
-        ctx,
-        this.component.sessionFiles.uploadFromUrl,
-        args,
-        options,
-      ),
-    delete: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionFileDeleteArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionFileDeleteArgs, unknown>(
-        ctx,
-        this.component.sessionFiles.delete,
-        args,
-        options,
-      ),
-    deleteAll: (
-      ctx: SteelComponentContext,
-      args: SteelComponentSessionFileDeleteAllArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentSessionFileDeleteAllArgs, unknown>(
-        ctx,
-        this.component.sessionFiles.deleteAll,
-        args,
-        options,
-      ),
-  };
-
-  public readonly files = {
-    list: (
-      ctx: SteelComponentContext,
-      args: SteelComponentFileListArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentFileListArgs, SteelFileListResult>(
-        ctx,
-        this.component.files.list,
-        args,
-        options,
-      ),
-    uploadFromUrl: (
-      ctx: SteelComponentContext,
-      args: SteelComponentFileUploadFromUrlArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentFileUploadFromUrlArgs, SteelFileRecord>(
-        ctx,
-        this.component.files.uploadFromUrl,
-        args,
-        options,
-      ),
-    delete: (
-      ctx: SteelComponentContext,
-      args: SteelComponentFileDeleteArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentFileDeleteArgs, unknown>(
-        ctx,
-        this.component.files.delete,
-        args,
-        options,
-      ),
-    downloadToStorage: (
-      ctx: SteelComponentContext,
-      args: SteelComponentFileDownloadToStorageArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentFileDownloadToStorageArgs, unknown>(
-        ctx,
-        this.component.files.downloadToStorage,
-        args,
-        options,
-      ),
-  };
-
-  public readonly captchas = {
-    status: (
-      ctx: SteelComponentContext,
-      args: SteelComponentCaptchaStatusArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentCaptchaStatusArgs, unknown>(
-        ctx,
-        this.component.captchas.status,
-        args,
-        options,
-      ),
-    solve: (
-      ctx: SteelComponentContext,
-      args: SteelComponentCaptchaSolveArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentCaptchaSolveArgs, unknown>(
-        ctx,
-        this.component.captchas.solve,
-        args,
-        options,
-      ),
-    solveImage: (
-      ctx: SteelComponentContext,
-      args: SteelComponentCaptchaSolveArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentCaptchaSolveArgs, unknown>(
-        ctx,
-        this.component.captchas.solveImage,
-        args,
-        options,
-      ),
-  };
-
-  public readonly profiles = {
-    list: (
-      ctx: SteelComponentContext,
-      args: SteelComponentProfileListArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentProfileListArgs, SteelProfileListResult>(
-        ctx,
-        this.component.profiles.list,
-        args,
-        options,
-      ),
-    get: (
-      ctx: SteelComponentContext,
-      args: SteelComponentProfileGetArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentProfileGetArgs, SteelProfileMetadata>(
-        ctx,
-        this.component.profiles.get,
-        args,
-        options,
-      ),
-    createFromUrl: (
-      ctx: SteelComponentContext,
-      args: SteelComponentProfileCreateFromUrlArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentProfileCreateFromUrlArgs, SteelProfileMetadata>(
-        ctx,
-        this.component.profiles.createFromUrl,
-        args,
-        options,
-      ),
-    updateFromUrl: (
-      ctx: SteelComponentContext,
-      args: SteelComponentProfileUpdateFromUrlArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentProfileUpdateFromUrlArgs, SteelProfileMetadata>(
-        ctx,
-        this.component.profiles.updateFromUrl,
-        args,
-        options,
-      ),
-  };
-
-  public readonly credentials = {
-    create: (
-      ctx: SteelComponentContext,
-      args: SteelComponentCredentialCreateArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentCredentialCreateArgs, SteelCredentialMetadata>(
-        ctx,
-        this.component.credentials.create,
-        args,
-        options,
-      ),
-    update: (
-      ctx: SteelComponentContext,
-      args: SteelComponentCredentialUpdateArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentCredentialUpdateArgs, SteelCredentialMetadata>(
-        ctx,
-        this.component.credentials.update,
-        args,
-        options,
-      ),
-    list: (
-      ctx: SteelComponentContext,
-      args: SteelComponentCredentialListArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentCredentialListArgs, SteelCredentialListResult>(
-        ctx,
-        this.component.credentials.list,
-        args,
-        options,
-      ),
-    delete: (
-      ctx: SteelComponentContext,
-      args: SteelComponentCredentialDeleteArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentCredentialDeleteArgs, unknown>(
-        ctx,
-        this.component.credentials.delete,
-        args,
-        options,
-      ),
-  };
-
-  public readonly extensions = {
-    list: (
-      ctx: SteelComponentContext,
-      args: SteelComponentExtensionListArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentExtensionListArgs, SteelExtensionListResult>(
-        ctx,
-        this.component.extensions.list,
-        args,
-        options,
-      ),
-    uploadFromUrl: (
-      ctx: SteelComponentContext,
-      args: SteelComponentExtensionUploadFromUrlArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentExtensionUploadFromUrlArgs, SteelExtensionMetadata>(
-        ctx,
-        this.component.extensions.uploadFromUrl,
-        args,
-        options,
-      ),
-    updateFromUrl: (
-      ctx: SteelComponentContext,
-      args: SteelComponentExtensionUpdateFromUrlArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentExtensionUpdateFromUrlArgs, SteelExtensionMetadata>(
-        ctx,
-        this.component.extensions.updateFromUrl,
-        args,
-        options,
-      ),
-    delete: (
-      ctx: SteelComponentContext,
-      args: SteelComponentExtensionDeleteArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentExtensionDeleteArgs, unknown>(
-        ctx,
-        this.component.extensions.delete,
-        args,
-        options,
-      ),
-    deleteAll: (
-      ctx: SteelComponentContext,
-      args: SteelComponentExtensionDeleteAllArgs,
-      options?: SteelComponentOptions,
-    ) =>
-      this.runAction<SteelComponentExtensionDeleteAllArgs, unknown>(
-        ctx,
-        this.component.extensions.deleteAll,
         args,
         options,
       ),

@@ -1,4 +1,5 @@
-import { action, internal, internalMutation, internalQuery, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
@@ -80,16 +81,11 @@ type SteelSessionsClient = {
   sessions?: {
     create?: (args: Record<string, unknown>) => Promise<unknown>;
     get?: (id: string) => Promise<unknown>;
+    retrieve?: (id: string) => Promise<unknown>;
     list?: (query?: Record<string, unknown>) => Promise<unknown>;
     release?: (id: string) => Promise<unknown>;
-    computer?: (args: Record<string, unknown>) => Promise<unknown>;
-    context?: (args: Record<string, unknown>) => Promise<unknown>;
-    liveDetails?: (args: Record<string, unknown>) => Promise<unknown>;
-    events?: (args: Record<string, unknown>) => Promise<unknown>;
   };
 };
-
-type RemoteCommandMethod = "computer" | "context" | "liveDetails" | "events";
 
 const pickFirstString = (value: JsonObject, keys: string[]): string | undefined => {
   for (const key of keys) {
@@ -261,14 +257,6 @@ const hasReleaseAlreadyDoneError = (error: unknown): boolean => {
 
 const getSessionSyncTime = (): number => Date.now();
 
-const normalizeLiveDetailsPayload = (
-  payload: JsonObject,
-  ownerId: string,
-  syncedAt: number,
-): UpsertSessionArgs => {
-  return normalizeCreatePayload(payload, ownerId, false, syncedAt);
-};
-
 const getInternalByExternalId = internalQuery({
   args: {
     externalId: v.string(),
@@ -295,6 +283,35 @@ const getInternalByExternalId = internalQuery({
   },
 });
 
+const listInternalByOwner = internalQuery({
+  args: {
+    ownerId: v.string(),
+    status: v.optional(v.union(v.literal("live"), v.literal("released"), v.literal("failed"))),
+    cursor: v.optional(v.string()),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    let sessionQuery = ctx.db
+      .query("sessions")
+      .withIndex("byOwnerId", (q) => q.eq("ownerId", args.ownerId));
+
+    if (args.status) {
+      sessionQuery = sessionQuery.filter((q) => q.eq(q.field("status"), args.status));
+    }
+
+    const page = await sessionQuery.paginate({
+      numItems: args.limit,
+      cursor: args.cursor ?? null,
+    });
+
+    return {
+      items: page.page,
+      hasMore: !page.isDone,
+      continuation: page.isDone ? undefined : page.continueCursor,
+    };
+  },
+});
+
 const buildReleasedSessionPayload = (
   session: RawSessionRecord,
   syncedAt: number,
@@ -313,50 +330,63 @@ const remoteRelease = async (
   externalId: string,
 ) => {
   const sessionClient = steel as SteelSessionsClient;
-  if (!sessionClient.sessions?.release) {
+  const releaseMethod = sessionClient.sessions?.release;
+  if (!releaseMethod) {
     throw normalizeError("Steel sessions.release is not available", "sessions.release");
   }
 
-  return runWithNormalizedError("sessions.release", () => sessionClient.sessions!.release!(externalId));
+  return runWithNormalizedError("sessions.release", () =>
+    releaseMethod.call(sessionClient.sessions, externalId),
+  );
 };
 
 const remoteGetSession = async (steel: ReturnType<typeof createSteelClient>, externalId: string) => {
   const sessionClient = steel as SteelSessionsClient;
-  if (!sessionClient.sessions?.get) {
-    throw normalizeError("Steel sessions.get is not available", "sessions.release");
+  const getMethod = sessionClient.sessions?.get;
+  const retrieveMethod = sessionClient.sessions?.retrieve;
+  if (!getMethod && !retrieveMethod) {
+    throw normalizeError("Steel sessions.get is not available", "sessions.get");
   }
 
-  return runWithNormalizedError("sessions.get", () => sessionClient.sessions!.get!(externalId));
+  const method = getMethod ?? retrieveMethod!;
+  return runWithNormalizedError("sessions.get", () =>
+    method.call(sessionClient.sessions, externalId),
+  );
 };
 
-const normalizeCommandArgs = (
-  operation: string,
-  args: Record<string, unknown> | undefined,
-): Record<string, unknown> => {
-  if (!args || typeof args !== "object" || Array.isArray(args)) {
-    throw normalizeError(`Invalid session command arguments for ${operation}`, operation);
-  }
-
-  return args;
-};
-
-const runRemoteSessionCommand = async (
-  operation: "sessions.computer" | "sessions.context",
-  method: RemoteCommandMethod,
+const remoteCreateSession = async (
   steel: ReturnType<typeof createSteelClient>,
   payload: Record<string, unknown>,
 ) => {
   const sessionClient = steel as SteelSessionsClient;
-  const command = sessionClient.sessions?.[method];
-  if (!command) {
-    throw normalizeError(`Steel sessions.${method} is not available`, operation);
+  const createMethod = sessionClient.sessions?.create;
+  if (!createMethod) {
+    throw normalizeError("Steel sessions.create is not available", "sessions.create");
   }
 
-  return runWithNormalizedError(operation, () => command(payload));
+  return runWithNormalizedError("sessions.create", () =>
+    createMethod.call(sessionClient.sessions, payload),
+  );
+};
+
+const remoteListSessions = async (
+  steel: ReturnType<typeof createSteelClient>,
+  queryArgs: Record<string, unknown>,
+) => {
+  const sessionClient = steel as SteelSessionsClient;
+  const listMethod = sessionClient.sessions?.list;
+  if (!listMethod) {
+    throw normalizeError("Steel sessions.list is not available", "sessions.refreshMany");
+  }
+
+  return runWithNormalizedError("sessions.refreshMany", () =>
+    listMethod.call(sessionClient.sessions, queryArgs),
+  );
 };
 
 const normalizeListLimit = (limit: number | undefined): number => {
-  const parsedLimit = Number.isFinite(limit) ? Math.floor(limit) : DEFAULT_LIST_LIMIT;
+  const parsedLimit =
+    typeof limit === "number" && Number.isFinite(limit) ? Math.floor(limit) : DEFAULT_LIST_LIMIT;
   return Math.max(1, Math.min(parsedLimit, MAX_LIST_LIMIT));
 };
 
@@ -461,7 +491,7 @@ export const sessions = {
   create: action({
     args: {
       apiKey: v.string(),
-      ownerId: v.optional(v.string()),
+      ownerId: v.string(),
       includeRaw: v.optional(v.boolean()),
       sessionArgs: v.optional(v.record(v.string(), v.any())),
     },
@@ -475,9 +505,7 @@ export const sessions = {
       );
       const sessionInput = args.sessionArgs ?? {};
 
-      const rawSession = await runWithNormalizedError("sessions.create", () =>
-        steel.sessions.create(sessionInput as Record<string, unknown>),
-      );
+      const rawSession = await remoteCreateSession(steel, sessionInput as Record<string, unknown>);
       if (!rawSession || typeof rawSession !== "object") {
         throw normalizeError("Invalid response from Steel sessions.create", "sessions.create");
       }
@@ -501,7 +529,7 @@ export const sessions = {
     args: {
       apiKey: v.string(),
       externalId: v.string(),
-      ownerId: v.optional(v.string()),
+      ownerId: v.string(),
       includeRaw: v.optional(v.boolean()),
     },
     handler: async (ctx, args) => {
@@ -512,9 +540,7 @@ export const sessions = {
         { apiKey: args.apiKey },
         { operation: "sessions.refresh" },
       );
-      const rawSession = await runWithNormalizedError("sessions.refresh", () =>
-        steel.sessions.get(args.externalId),
-      );
+      const rawSession = await remoteGetSession(steel, args.externalId);
       if (!rawSession || typeof rawSession !== "object") {
         throw normalizeError("Invalid response from Steel sessions.get", "sessions.refresh");
       }
@@ -537,19 +563,17 @@ export const sessions = {
   get: query({
     args: {
       id: v.string(),
-      ownerId: v.optional(v.string()),
+      ownerId: v.string(),
     },
     handler: async (ctx, args) => {
-      const session = await ctx.db.get(args.id);
+      const session = await ctx.db.get(args.id as any);
       if (!session) {
         return null;
       }
 
-      if (args.ownerId) {
-        const ownerId = normalizeOwnerId(args.ownerId);
-        if (!ownerId || session.ownerId !== ownerId) {
-          throw normalizeError("ownerId mismatch for session query", "sessions.get");
-        }
+      const ownerId = requireOwnerId(args.ownerId, "sessions.get");
+      if (session.ownerId !== ownerId) {
+        throw normalizeError("ownerId mismatch for session query", "sessions.get");
       }
 
       return normalizeWithError("sessions.get", () => normalizeSessionRecord(session));
@@ -558,7 +582,7 @@ export const sessions = {
   getByExternalId: query({
     args: {
       externalId: v.string(),
-      ownerId: v.optional(v.string()),
+      ownerId: v.string(),
     },
     handler: async (ctx, args) => {
       const session = await ctx.db
@@ -570,14 +594,12 @@ export const sessions = {
         return null;
       }
 
-      if (args.ownerId) {
-        const ownerId = normalizeOwnerId(args.ownerId);
-        if (!ownerId || session.ownerId !== ownerId) {
-          throw normalizeError(
-            "ownerId mismatch for session query",
-            "sessions.getByExternalId",
-          );
-        }
+      const ownerId = requireOwnerId(args.ownerId, "sessions.getByExternalId");
+      if (session.ownerId !== ownerId) {
+        throw normalizeError(
+          "ownerId mismatch for session query",
+          "sessions.getByExternalId",
+        );
       }
 
       return normalizeWithError("sessions.getByExternalId", () =>
@@ -588,7 +610,7 @@ export const sessions = {
   refreshMany: action({
     args: {
       apiKey: v.string(),
-      ownerId: v.optional(v.string()),
+      ownerId: v.string(),
       status: v.optional(v.union(v.literal("live"), v.literal("released"), v.literal("failed"))),
       cursor: v.optional(v.string()),
       limit: v.optional(v.number()),
@@ -609,10 +631,7 @@ export const sessions = {
         ...(args.cursor ? { cursor: args.cursor } : {}),
         limit,
       };
-      const listResponse = await runWithNormalizedError("sessions.refreshMany", () =>
-        (steel as { sessions?: { list?: (query?: Record<string, unknown>) => Promise<unknown> } }).sessions
-          ?.list?.(listArgs),
-      );
+      const listResponse = await remoteListSessions(steel, listArgs);
       if (typeof listResponse !== "object") {
         throw normalizeError("Invalid response from Steel sessions.list", "sessions.refreshMany");
       }
@@ -642,11 +661,7 @@ export const sessions = {
 
         try {
           const syncedAt = getSessionSyncTime();
-          const remoteSession = await runWithNormalizedError("sessions.refreshMany.item", () =>
-            (steel as { sessions?: { get?: (id: string) => Promise<unknown> } }).sessions?.get?.(
-              externalId,
-            ),
-          );
+          const remoteSession = await remoteGetSession(steel, externalId);
           if (!remoteSession || typeof remoteSession !== "object") {
             throw normalizeError("Invalid response from Steel sessions.get", "sessions.refreshMany.item");
           }
@@ -679,27 +694,25 @@ export const sessions = {
   list: query({
     args: {
       status: v.optional(v.union(v.literal("live"), v.literal("released"), v.literal("failed"))),
-      ownerId: v.optional(v.string()),
+      ownerId: v.string(),
       cursor: v.optional(v.string()),
       limit: v.optional(v.number()),
     },
     handler: async (ctx, args) => {
       const limit = normalizeListLimit(args.limit);
-      const ownerId = normalizeOwnerId(args.ownerId);
+      const ownerId = requireOwnerId(args.ownerId, "sessions.list");
 
-      let sessionQuery = ctx.db.query("sessions").order("desc");
+      let sessionQuery = ctx.db
+        .query("sessions")
+        .withIndex("byOwnerId", (q) => q.eq("ownerId", ownerId));
 
       if (args.status) {
         sessionQuery = sessionQuery.filter((q) => q.eq(q.field("status"), args.status));
       }
 
-      if (ownerId) {
-        sessionQuery = sessionQuery.filter((q) => q.eq(q.field("ownerId"), ownerId));
-      }
-
       const page = await sessionQuery.paginate({
         numItems: limit,
-        cursor: args.cursor,
+        cursor: args.cursor ?? null,
       });
 
       return {
@@ -715,7 +728,7 @@ export const sessions = {
     args: {
       apiKey: v.string(),
       externalId: v.string(),
-      ownerId: v.optional(v.string()),
+      ownerId: v.string(),
     },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.release");
@@ -791,7 +804,7 @@ export const sessions = {
   releaseAll: action({
     args: {
       apiKey: v.string(),
-      ownerId: v.optional(v.string()),
+      ownerId: v.string(),
       status: v.optional(
         v.union(v.literal("live"), v.literal("released"), v.literal("failed")),
       ),
@@ -807,17 +820,18 @@ export const sessions = {
       );
       const limit = normalizeListLimit(args.limit);
 
-      let sessionQuery = ctx.db.query("sessions").order("desc");
-      sessionQuery = sessionQuery.filter((q) => q.eq(q.field("ownerId"), ownerId));
-      if (args.status) {
-        sessionQuery = sessionQuery.filter((q) => q.eq(q.field("status"), args.status));
-      }
-
-      const page = await sessionQuery.paginate({ numItems: limit, cursor: args.cursor });
+      const page = await runWithNormalizedError("sessions.listInternalByOwner", () =>
+        ctx.runQuery(internal.sessions.listInternalByOwner, {
+          ownerId,
+          status: args.status,
+          cursor: args.cursor,
+          limit,
+        }),
+      );
       const results: UpsertSessionArgs[] = [];
       const failures: ReleaseAllFailure[] = [];
 
-      for (const session of page.page) {
+      for (const session of page.items) {
         const releaseNow = Date.now();
         if (session.status === "released") {
           const released = buildReleasedSessionPayload(session, releaseNow);
@@ -882,123 +896,23 @@ export const sessions = {
       return {
         items: results,
         failures,
-        hasMore: !page.isDone,
-        continuation: page.isDone ? undefined : page.continueCursor,
+        hasMore: page.hasMore,
+        continuation: page.continuation,
       };
     },
   }),
-  computer: action({
-    args: {
-      apiKey: v.string(),
-      ownerId: v.optional(v.string()),
-      commandArgs: v.record(v.string(), v.any()),
-    },
-    handler: async (ctx, args) => {
-      requireOwnerId(args.ownerId, "sessions.computer");
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.computer" },
-      );
-      const commandArgs = normalizeCommandArgs("sessions.computer", args.commandArgs);
-
-      return await runRemoteSessionCommand(
-        "sessions.computer",
-        "computer",
-        steel,
-        commandArgs,
-      );
-    },
-  }),
-  context: action({
-    args: {
-      apiKey: v.string(),
-      ownerId: v.optional(v.string()),
-      commandArgs: v.record(v.string(), v.any()),
-    },
-    handler: async (ctx, args) => {
-      requireOwnerId(args.ownerId, "sessions.context");
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.context" },
-      );
-      const commandArgs = normalizeCommandArgs("sessions.context", args.commandArgs);
-
-      return await runRemoteSessionCommand(
-        "sessions.context",
-        "context",
-        steel,
-        commandArgs,
-      );
-    },
-  }),
-  liveDetails: action({
-    args: {
-      apiKey: v.string(),
-      ownerId: v.optional(v.string()),
-      commandArgs: v.record(v.string(), v.any()),
-      persistSnapshot: v.optional(v.boolean()),
-    },
-    handler: async (ctx, args) => {
-      const ownerId = requireOwnerId(args.ownerId, "sessions.liveDetails");
-      const persistSnapshot = normalizeIncludeRaw(args.persistSnapshot);
-      const syncedAt = getSessionSyncTime();
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.liveDetails" },
-      );
-      const commandArgs = normalizeCommandArgs("sessions.liveDetails", args.commandArgs);
-      const payload = await runRemoteSessionCommand(
-        "sessions.liveDetails",
-        "liveDetails",
-        steel,
-        commandArgs,
-      );
-
-      if (persistSnapshot) {
-        if (!payload || typeof payload !== "object") {
-          throw normalizeError(
-            "Invalid response from Steel sessions.liveDetails",
-            "sessions.liveDetails",
-          );
-        }
-
-        const normalizedSession = normalizeWithError("sessions.liveDetails", () =>
-          normalizeLiveDetailsPayload(payload as JsonObject, ownerId, syncedAt),
-        );
-        await runWithNormalizedError("sessions.upsert", () =>
-          ctx.runMutation(internal.sessions.upsert, normalizedSession),
-        );
-      }
-
-      return payload;
-    },
-  }),
-  events: action({
-    args: {
-      apiKey: v.string(),
-      ownerId: v.optional(v.string()),
-      commandArgs: v.record(v.string(), v.any()),
-    },
-    handler: async (ctx, args) => {
-      requireOwnerId(args.ownerId, "sessions.events");
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.events" },
-      );
-      const commandArgs = normalizeCommandArgs("sessions.events", args.commandArgs);
-
-      return await runRemoteSessionCommand(
-        "sessions.events",
-        "events",
-        steel,
-        commandArgs,
-      );
-    },
-  }),
   getInternalByExternalId: getInternalByExternalId,
+  listInternalByOwner: listInternalByOwner,
   upsert: upsertSession,
 };
+
+export const create = sessions.create;
+export const refresh = sessions.refresh;
+export const get = sessions.get;
+export const getByExternalId = sessions.getByExternalId;
+export const refreshMany = sessions.refreshMany;
+export const list = sessions.list;
+export const release = sessions.release;
+export const releaseAll = sessions.releaseAll;
+export const upsert = sessions.upsert;
+export { getInternalByExternalId, listInternalByOwner };

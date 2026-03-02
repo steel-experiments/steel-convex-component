@@ -1,4 +1,5 @@
 import { action, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
@@ -439,3 +440,9 @@ export const profiles = {
   }),
   upsert: upsertProfileMetadata,
 };
+
+export const list = profiles.list;
+export const get = profiles.get;
+export const createFromUrl = profiles.createFromUrl;
+export const updateFromUrl = profiles.updateFromUrl;
+export const upsert = profiles.upsert;

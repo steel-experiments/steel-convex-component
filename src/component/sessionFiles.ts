@@ -1,4 +1,5 @@
 import { action, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
@@ -369,7 +370,7 @@ export const sessionFiles = {
       );
 
       await runWithNormalizedError("sessionFiles.delete", () =>
-        _ctx.runMutation(internal.sessionFiles.delete, {
+        _ctx.runMutation(internal.sessionFiles.deleteOne, {
           sessionExternalId: args.sessionExternalId,
           path: args.path,
           ownerId,
@@ -406,7 +407,7 @@ export const sessionFiles = {
       );
 
       await runWithNormalizedError("sessionFiles.deleteAll", () =>
-        _ctx.runMutation(internal.sessionFiles.deleteAll, {
+        _ctx.runMutation(internal.sessionFiles.deleteAllForSession, {
           sessionExternalId: args.sessionExternalId,
           ownerId,
         }),
@@ -419,3 +420,13 @@ export const sessionFiles = {
   deleteOne: deleteSessionFileMetadata,
   deleteAllForSession: deleteAllSessionFileMetadata,
 };
+
+const sessionFilesDelete = sessionFiles.delete;
+
+export const list = sessionFiles.list;
+export const uploadFromUrl = sessionFiles.uploadFromUrl;
+export { sessionFilesDelete as delete };
+export const deleteAll = sessionFiles.deleteAll;
+export const upsert = sessionFiles.upsert;
+export const deleteOne = sessionFiles.deleteOne;
+export const deleteAllForSession = sessionFiles.deleteAllForSession;

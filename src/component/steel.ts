@@ -5,9 +5,7 @@ export interface SteelSessionArgs {
   apiKey?: string;
 }
 
-export interface SteelClient {
-  [key: string]: unknown;
-}
+export type SteelClient = unknown;
 
 export type SteelClientFactory = (
   args: SteelSessionArgs,
@@ -60,5 +58,5 @@ export const createSteelClient = (
     return testFactory(args, options);
   }
 
-  return new Steel({ apiKey: args.apiKey.trim() }) as SteelClient;
+  return new Steel({ steelAPIKey: args.apiKey.trim() }) as unknown as SteelClient;
 };

@@ -1,5 +1,5 @@
 import { defineApp } from "convex/server";
-import steel from "../src/component/convex.config.js";
+import steel from "../../src/component/convex.config.js";
 
 const app = defineApp();
 app.use(steel);

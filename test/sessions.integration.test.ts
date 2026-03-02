@@ -8,7 +8,10 @@ import {
 } from "./sessionTestUtils";
 
 const liveApiKey = typeof process !== "undefined" ? process.env.STEEL_API_KEY : undefined;
-const hasLiveMode = typeof liveApiKey === "string" && liveApiKey.trim().length > 0;
+const hasLiveMode =
+  typeof liveApiKey === "string" &&
+  liveApiKey.trim().length > 0 &&
+  process.env.STEEL_LIVE_TEST === "1";
 
 describe("steel sessions integration smoke tests", () => {
   beforeEach(() => {

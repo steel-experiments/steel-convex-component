@@ -6,18 +6,18 @@
   "private": false,
   "license": "MIT",
   "scripts": {
-    "build": "convex codegen --component-dir ./src/component && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "codegen": "convex codegen --component-dir ./src/component",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run test/sessions.unit.test.ts",
     "test:integration": "vitest run test/sessions.integration.test.ts",
     "release:verify": "node scripts/release-verify.js",
-    "release:check": "npm run release:verify && npm run test",
+    "release:check": "npm run build && npm run release:verify && npm run test",
     "release": "npm run release:check",
     "publish:dry-run": "npm run release:check && npm pack --dry-run",
     "release:publish": "npm run release && npm publish --access public",
-    "prepublishOnly": "npm run release:check"
+    "prepublishOnly": "npm run build && npm run test"
   },
   "exports": {
     ".": {
@@ -53,6 +53,7 @@
   },
   "devDependencies": {
     "convex-test": "^0.0.41",
+    "typescript": "^5.9.3",
     "vitest": "^3.0.0"
   }
 }

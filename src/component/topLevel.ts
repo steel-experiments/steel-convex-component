@@ -196,3 +196,7 @@ export const steel = {
     },
   }),
 };
+
+export const screenshot = steel.screenshot;
+export const scrape = steel.scrape;
+export const pdf = steel.pdf;
