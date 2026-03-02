@@ -651,7 +651,7 @@
       "id": "T027",
       "title": "Add register helper and test scaffolding for component actions",
       "priority": 3,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T024"
       ],
@@ -662,7 +662,14 @@
       ],
       "tags": [
         "tests"
-      ]
+      ],
+      "updated_at": "2026-03-02T09:38:34Z",
+      "details": "Added test helper registration scaffolding, session/validation fixtures, and deterministic Steel SDK mocking hooks for component action tests.",
+      "files": [
+        "src/component/steel.ts",
+        "src/test.ts"
+      ],
+      "blockers": []
     },
     {
       "id": "T028",
