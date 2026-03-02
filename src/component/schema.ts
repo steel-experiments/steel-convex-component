@@ -46,4 +46,14 @@ export const schema = defineSchema({
     .index("byStatus", ["status"])
     .index("byCreatedAt", ["createdAt"])
     .index("byOwnerId", ["ownerId"]),
+  sessionFileMetadata: defineTable({
+    sessionExternalId: vString,
+    path: vString,
+    size: vNumber,
+    lastModified: vNumber,
+    lastSyncedAt: vNumber,
+    ownerId: vOwnerId,
+  })
+    .index("bySessionExternalId", ["sessionExternalId"])
+    .index("bySessionExternalIdAndPath", ["sessionExternalId", "path"]),
 });

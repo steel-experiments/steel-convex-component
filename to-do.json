@@ -447,7 +447,7 @@
       "id": "T018",
       "title": "Create sessionFileMetadata table and session file actions",
       "priority": 3,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T005"
       ],
@@ -459,7 +459,16 @@
       "tags": [
         "session-files",
         "v1"
-      ]
+      ],
+      "updated_at": "2026-03-02T09:34:01Z",
+      "details": "Implemented sessionFileMetadata schema/indexes plus sessionFiles.list/uploadFromUrl/delete/deleteAll actions with local metadata upsert and delete synchronization.",
+      "files": [
+        "src/component/schema.ts",
+        "src/component/sessionFiles.ts",
+        "src/client/index.ts",
+        "to-do.json"
+      ],
+      "blockers": []
     },
     {
       "id": "T019",
@@ -589,9 +598,10 @@
       "tags": [
         "client"
       ],
-      "updated_at": "2026-03-02T09:33:15Z",
+      "updated_at": "2026-03-02T09:33:22Z",
       "files": [
-        "src/client/index.ts"
+        "src/client/index.ts",
+        "to-do.json"
       ],
       "details": "Built app-facing SteelComponent wrapper in src/client/index.ts with runAction/runQuery/runMutation helpers, typed session methods, and apiKey/ownerId context normalization + injection into action/mutation/query args."
     },

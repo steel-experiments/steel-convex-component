@@ -29,6 +29,12 @@ interface SteelComponentFunctions {
     liveDetails: unknown;
     events: unknown;
   };
+  sessionFiles: {
+    list: unknown;
+    uploadFromUrl: unknown;
+    delete: unknown;
+    deleteAll: unknown;
+  };
 }
 
 export type SteelSessionStatus = "live" | "released" | "failed";
@@ -78,6 +84,21 @@ export interface SteelReleaseAllResult {
 
 export interface SteelListResult {
   items: SteelSessionRecord[];
+  hasMore: boolean;
+  continuation?: string;
+}
+
+export interface SteelSessionFileRecord {
+  sessionExternalId: string;
+  path: string;
+  size: number;
+  lastModified: number;
+  ownerId?: string;
+  lastSyncedAt: number;
+}
+
+export interface SteelSessionFileListResult {
+  items: SteelSessionFileRecord[];
   hasMore: boolean;
   continuation?: string;
 }
@@ -140,6 +161,32 @@ export interface SteelComponentSessionLiveDetailsArgs {
   ownerId: string;
   commandArgs: Record<string, unknown>;
   persistSnapshot?: boolean;
+}
+
+export interface SteelComponentSessionFileListArgs {
+  ownerId: string;
+  sessionExternalId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface SteelComponentSessionFileUploadArgs {
+  ownerId: string;
+  sessionExternalId: string;
+  url: string;
+  path?: string;
+  fileArgs?: Record<string, unknown>;
+}
+
+export interface SteelComponentSessionFileDeleteArgs {
+  ownerId: string;
+  sessionExternalId: string;
+  path: string;
+}
+
+export interface SteelComponentSessionFileDeleteAllArgs {
+  ownerId: string;
+  sessionExternalId: string;
 }
 
 export class SteelComponent {
@@ -361,7 +408,7 @@ export class SteelComponent {
         args,
         options,
       ),
-    events: (
+  events: (
       ctx: SteelComponentContext,
       args: SteelComponentSessionCommandArgs,
       options?: SteelComponentOptions,
@@ -369,6 +416,53 @@ export class SteelComponent {
       this.runAction<SteelComponentSessionCommandArgs, unknown>(
         ctx,
         this.component.sessions.events,
+        args,
+        options,
+      ),
+  };
+
+  public readonly sessionFiles = {
+    list: (
+      ctx: SteelComponentContext,
+      args: SteelComponentSessionFileListArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentSessionFileListArgs, SteelSessionFileListResult>(
+        ctx,
+        this.component.sessionFiles.list,
+        args,
+        options,
+      ),
+    uploadFromUrl: (
+      ctx: SteelComponentContext,
+      args: SteelComponentSessionFileUploadArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentSessionFileUploadArgs, SteelSessionFileRecord | unknown>(
+        ctx,
+        this.component.sessionFiles.uploadFromUrl,
+        args,
+        options,
+      ),
+    delete: (
+      ctx: SteelComponentContext,
+      args: SteelComponentSessionFileDeleteArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentSessionFileDeleteArgs, unknown>(
+        ctx,
+        this.component.sessionFiles.delete,
+        args,
+        options,
+      ),
+    deleteAll: (
+      ctx: SteelComponentContext,
+      args: SteelComponentSessionFileDeleteAllArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentSessionFileDeleteAllArgs, unknown>(
+        ctx,
+        this.component.sessionFiles.deleteAll,
         args,
         options,
       ),
