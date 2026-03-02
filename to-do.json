@@ -422,7 +422,7 @@
       "id": "T017",
       "title": "Implement sessions.liveDetails and sessions.events actions",
       "priority": 2,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T007",
         "T015"
@@ -435,6 +435,12 @@
       "tags": [
         "sessions",
         "v1"
+      ],
+      "updated_at": "2026-03-02T09:32:30Z",
+      "details": "Implemented sessions.liveDetails and sessions.events as owner-protected pass-through actions with raw-by-default responses; liveDetails now optionally persists a lightweight session snapshot for owner-scoped sync.",
+      "files": [
+        "src/component/sessions.ts",
+        "to-do.json"
       ]
     },
     {

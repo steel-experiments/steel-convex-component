@@ -84,10 +84,12 @@ type SteelSessionsClient = {
     release?: (id: string) => Promise<unknown>;
     computer?: (args: Record<string, unknown>) => Promise<unknown>;
     context?: (args: Record<string, unknown>) => Promise<unknown>;
+    liveDetails?: (args: Record<string, unknown>) => Promise<unknown>;
+    events?: (args: Record<string, unknown>) => Promise<unknown>;
   };
 };
 
-type RemoteCommandMethod = "computer" | "context";
+type RemoteCommandMethod = "computer" | "context" | "liveDetails" | "events";
 
 const pickFirstString = (value: JsonObject, keys: string[]): string | undefined => {
   for (const key of keys) {
@@ -258,6 +260,14 @@ const hasReleaseAlreadyDoneError = (error: unknown): boolean => {
 };
 
 const getSessionSyncTime = (): number => Date.now();
+
+const normalizeLiveDetailsPayload = (
+  payload: JsonObject,
+  ownerId: string,
+  syncedAt: number,
+): UpsertSessionArgs => {
+  return normalizeCreatePayload(payload, ownerId, false, syncedAt);
+};
 
 const getInternalByExternalId = internalQuery({
   args: {
@@ -918,6 +928,72 @@ export const sessions = {
       return await runRemoteSessionCommand(
         "sessions.context",
         "context",
+        steel,
+        commandArgs,
+      );
+    },
+  }),
+  liveDetails: action({
+    args: {
+      apiKey: v.string(),
+      ownerId: v.optional(v.string()),
+      commandArgs: v.record(v.string(), v.any()),
+      persistSnapshot: v.optional(v.boolean()),
+    },
+    handler: async (ctx, args) => {
+      const ownerId = requireOwnerId(args.ownerId, "sessions.liveDetails");
+      const persistSnapshot = normalizeIncludeRaw(args.persistSnapshot);
+      const syncedAt = getSessionSyncTime();
+
+      const steel = createSteelClient(
+        { apiKey: args.apiKey },
+        { operation: "sessions.liveDetails" },
+      );
+      const commandArgs = normalizeCommandArgs("sessions.liveDetails", args.commandArgs);
+      const payload = await runRemoteSessionCommand(
+        "sessions.liveDetails",
+        "liveDetails",
+        steel,
+        commandArgs,
+      );
+
+      if (persistSnapshot) {
+        if (!payload || typeof payload !== "object") {
+          throw normalizeError(
+            "Invalid response from Steel sessions.liveDetails",
+            "sessions.liveDetails",
+          );
+        }
+
+        const normalizedSession = normalizeWithError("sessions.liveDetails", () =>
+          normalizeLiveDetailsPayload(payload as JsonObject, ownerId, syncedAt),
+        );
+        await runWithNormalizedError("sessions.upsert", () =>
+          ctx.runMutation(internal.sessions.upsert, normalizedSession),
+        );
+      }
+
+      return payload;
+    },
+  }),
+  events: action({
+    args: {
+      apiKey: v.string(),
+      ownerId: v.optional(v.string()),
+      commandArgs: v.record(v.string(), v.any()),
+    },
+    handler: async (ctx, args) => {
+      requireOwnerId(args.ownerId, "sessions.events");
+
+      const steel = createSteelClient(
+        { apiKey: args.apiKey },
+        { operation: "sessions.events" },
+      );
+      const commandArgs = normalizeCommandArgs("sessions.events", args.commandArgs);
+
+      return await runRemoteSessionCommand(
+        "sessions.events",
+        "events",
         steel,
         commandArgs,
       );
