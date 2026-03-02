@@ -29,6 +29,11 @@ interface SteelComponentFunctions {
     liveDetails: unknown;
     events: unknown;
   };
+  captchas: {
+    status: unknown;
+    solve: unknown;
+    solveImage: unknown;
+  };
   sessionFiles: {
     list: unknown;
     uploadFromUrl: unknown;
@@ -95,6 +100,15 @@ export interface SteelSessionFileRecord {
   lastModified: number;
   ownerId?: string;
   lastSyncedAt: number;
+}
+
+export interface SteelCaptchaState {
+  sessionExternalId: string;
+  pageId: string;
+  url: string;
+  isSolvingCaptcha: boolean;
+  lastUpdated?: number;
+  ownerId: string;
 }
 
 export interface SteelSessionFileListResult {
@@ -187,6 +201,20 @@ export interface SteelComponentSessionFileDeleteArgs {
 export interface SteelComponentSessionFileDeleteAllArgs {
   ownerId: string;
   sessionExternalId: string;
+}
+
+export interface SteelComponentCaptchaStatusArgs {
+  sessionExternalId: string;
+  pageId: string;
+  persistSnapshot?: boolean;
+  ownerId: string;
+}
+
+export interface SteelComponentCaptchaSolveArgs {
+  sessionExternalId: string;
+  pageId: string;
+  ownerId: string;
+  commandArgs?: Record<string, unknown>;
 }
 
 export class SteelComponent {
@@ -463,6 +491,42 @@ export class SteelComponent {
       this.runAction<SteelComponentSessionFileDeleteAllArgs, unknown>(
         ctx,
         this.component.sessionFiles.deleteAll,
+        args,
+        options,
+      ),
+  };
+
+  public readonly captchas = {
+    status: (
+      ctx: SteelComponentContext,
+      args: SteelComponentCaptchaStatusArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentCaptchaStatusArgs, unknown>(
+        ctx,
+        this.component.captchas.status,
+        args,
+        options,
+      ),
+    solve: (
+      ctx: SteelComponentContext,
+      args: SteelComponentCaptchaSolveArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentCaptchaSolveArgs, unknown>(
+        ctx,
+        this.component.captchas.solve,
+        args,
+        options,
+      ),
+    solveImage: (
+      ctx: SteelComponentContext,
+      args: SteelComponentCaptchaSolveArgs,
+      options?: SteelComponentOptions,
+    ) =>
+      this.runAction<SteelComponentCaptchaSolveArgs, unknown>(
+        ctx,
+        this.component.captchas.solveImage,
         args,
         options,
       ),

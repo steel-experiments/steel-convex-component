@@ -474,7 +474,7 @@
       "id": "T019",
       "title": "Add captchaStates table and captcha actions",
       "priority": 3,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T007"
       ],
@@ -486,7 +486,14 @@
       "tags": [
         "captchas",
         "v1"
-      ]
+      ],
+      "updated_at": "2026-03-02T09:34:57Z",
+      "files": [
+        "src/component/schema.ts",
+        "src/component/captchas.ts",
+        "src/client/index.ts"
+      ],
+      "details": "Implement captchaStates table and captcha actions (status, solve, solveImage) with optional status snapshot persistence."
     },
     {
       "id": "T020",
