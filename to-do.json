@@ -374,7 +374,7 @@
       "id": "T015",
       "title": "Implement internal sessions.upsert and getInternalByExternalId",
       "priority": 2,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T012"
       ],
@@ -386,7 +386,13 @@
       "tags": [
         "internal",
         "sessions"
-      ]
+      ],
+      "updated_at": "2026-03-02T09:30:52Z",
+      "details": "Implemented internal sessions.upsert and added getInternalByExternalId query with owner-timestamp checks plus normalized write helpers so ownerId requirements and sync timestamps are shared across actions.",
+      "files": [
+        "src/component/sessions.ts"
+      ],
+      "blockers": []
     },
     {
       "id": "T016",

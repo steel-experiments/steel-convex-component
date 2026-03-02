@@ -1,4 +1,4 @@
-import { action, internal, internalMutation, query } from "./_generated/server";
+import { action, internal, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
@@ -121,6 +121,18 @@ const pickFirstBoolean = (value: JsonObject, keys: string[]): boolean | undefine
   return undefined;
 };
 
+const requireOwnerId = (ownerId: string | undefined, operation: string): string => {
+  const normalized = normalizeOwnerId(ownerId);
+  if (!normalized) {
+    throw normalizeError(
+      `Missing ownerId: ownerId is required for ${operation}`,
+      operation,
+    );
+  }
+
+  return normalized;
+};
+
 const normalizeWithError = <T>(operation: string, handler: () => T): T => {
   try {
     return handler();
@@ -144,8 +156,8 @@ const normalizeCreatePayload = (
   payload: JsonObject,
   ownerId: string,
   includeRaw: boolean,
+  syncedAt: number,
 ): UpsertSessionArgs => {
-  const now = Date.now();
   const externalId =
     pickFirstString(payload, ["externalId", "sessionExternalId", "sessionId", "id"]) ??
     undefined;
@@ -163,12 +175,12 @@ const normalizeCreatePayload = (
     createdAt:
       pickFirstNumber(payload, ["createdAt", "created_at"]) ??
       pickFirstNumber(payload, ["created"]) ??
-      now,
+      syncedAt,
     updatedAt:
       pickFirstNumber(payload, ["updatedAt", "updated_at"]) ??
       pickFirstNumber(payload, ["updated"]) ??
-      now,
-    lastSyncedAt: now,
+      syncedAt,
+    lastSyncedAt: syncedAt,
     debugUrl: pickFirstString(payload, ["debugUrl", "debug_url"]),
     sessionViewerUrl: pickFirstString(payload, [
       "sessionViewerUrl",
@@ -240,6 +252,34 @@ const hasReleaseAlreadyDoneError = (error: unknown): boolean => {
     (marker) => message.includes(marker),
   );
 };
+
+const getSessionSyncTime = (): number => Date.now();
+
+const getInternalByExternalId = internalQuery({
+  args: {
+    externalId: v.string(),
+    ownerId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("byExternalId", (q) => q.eq("externalId", args.externalId))
+      .unique();
+
+    if (!session) {
+      return null;
+    }
+
+    if (session.ownerId !== args.ownerId) {
+      throw normalizeError(
+        "ownerId mismatch for session lookup",
+        "sessions.getInternalByExternalId",
+      );
+    }
+
+    return session;
+  },
+});
 
 const buildReleasedSessionPayload = (
   session: RawSessionRecord,
@@ -386,13 +426,8 @@ export const sessions = {
       sessionArgs: v.optional(v.record(v.string(), v.any())),
     },
     handler: async (ctx, args) => {
-      const ownerId = normalizeOwnerId(args.ownerId);
-      if (!ownerId) {
-        throw normalizeError(
-          "Missing ownerId: ownerId is required for sessions.create",
-          "sessions.create",
-        );
-      }
+      const ownerId = requireOwnerId(args.ownerId, "sessions.create");
+      const syncedAt = getSessionSyncTime();
 
       const steel = createSteelClient(
         { apiKey: args.apiKey },
@@ -412,6 +447,7 @@ export const sessions = {
           rawSession as JsonObject,
           ownerId,
           normalizeIncludeRaw(args.includeRaw),
+          syncedAt,
         ),
       );
       await runWithNormalizedError("sessions.upsert", () =>
@@ -429,13 +465,8 @@ export const sessions = {
       includeRaw: v.optional(v.boolean()),
     },
     handler: async (ctx, args) => {
-      const ownerId = normalizeOwnerId(args.ownerId);
-      if (!ownerId) {
-        throw normalizeError(
-          "Missing ownerId: ownerId is required for sessions.refresh",
-          "sessions.refresh",
-        );
-      }
+      const ownerId = requireOwnerId(args.ownerId, "sessions.refresh");
+      const syncedAt = getSessionSyncTime();
 
       const steel = createSteelClient(
         { apiKey: args.apiKey },
@@ -453,6 +484,7 @@ export const sessions = {
           rawSession as JsonObject,
           ownerId,
           normalizeIncludeRaw(args.includeRaw),
+          syncedAt,
         ),
       );
       await runWithNormalizedError("sessions.upsert", () =>
@@ -523,13 +555,7 @@ export const sessions = {
       includeRaw: v.optional(v.boolean()),
     },
     handler: async (ctx, args) => {
-      const ownerId = normalizeOwnerId(args.ownerId);
-      if (!ownerId) {
-        throw normalizeError(
-          "Missing ownerId: ownerId is required for sessions.refreshMany",
-          "sessions.refreshMany",
-        );
-      }
+      const ownerId = requireOwnerId(args.ownerId, "sessions.refreshMany");
 
       const steel = createSteelClient(
         { apiKey: args.apiKey },
@@ -575,6 +601,7 @@ export const sessions = {
         }
 
         try {
+          const syncedAt = getSessionSyncTime();
           const remoteSession = await runWithNormalizedError("sessions.refreshMany.item", () =>
             (steel as { sessions?: { get?: (id: string) => Promise<unknown> } }).sessions?.get?.(
               externalId,
@@ -585,12 +612,16 @@ export const sessions = {
           }
 
           const normalizedSession = normalizeWithError("sessions.refreshMany.item", () =>
-            normalizeCreatePayload(remoteSession as JsonObject, ownerId, includeRaw),
+            normalizeCreatePayload(remoteSession as JsonObject, ownerId, includeRaw, syncedAt),
           );
+          const normalizedWithTimestamp = {
+            ...normalizedSession,
+            lastSyncedAt: syncedAt,
+          };
           await runWithNormalizedError("sessions.upsert", () =>
-            ctx.runMutation(internal.sessions.upsert, normalizedSession),
+            ctx.runMutation(internal.sessions.upsert, normalizedWithTimestamp),
           );
-          results.push(normalizedSession);
+          results.push(normalizedWithTimestamp);
         } catch (error) {
           const structured = error instanceof Error ? error.message : "Session refresh failed";
           failures.push({ externalId, operation: "sessions.refreshMany.item", message: structured });
@@ -647,26 +678,15 @@ export const sessions = {
       ownerId: v.optional(v.string()),
     },
     handler: async (ctx, args) => {
-      const ownerId = normalizeOwnerId(args.ownerId);
-      if (!ownerId) {
-        throw normalizeError(
-          "Missing ownerId: ownerId is required for sessions.release",
-          "sessions.release",
-        );
-      }
+      const ownerId = requireOwnerId(args.ownerId, "sessions.release");
 
-      const now = Date.now();
-      const existing = await ctx.db
-        .query("sessions")
-        .withIndex("byExternalId", (q) => q.eq("externalId", args.externalId))
-        .unique();
-
-      if (existing && existing.ownerId && existing.ownerId !== ownerId) {
-        throw normalizeError(
-          "ownerId mismatch for session release",
-          "sessions.release",
-        );
-      }
+      const now = getSessionSyncTime();
+      const existing = await runWithNormalizedError("sessions.getInternalByExternalId", () =>
+        ctx.runQuery(internal.sessions.getInternalByExternalId, {
+          externalId: args.externalId,
+          ownerId,
+        }),
+      );
 
       if (existing?.status === "released") {
         const released = buildReleasedSessionPayload(existing, now);
@@ -699,6 +719,7 @@ export const sessions = {
             remoteSession as JsonObject,
             ownerId,
             false,
+            now,
           ),
         );
         const released = {
@@ -738,15 +759,8 @@ export const sessions = {
       limit: v.optional(v.number()),
     },
     handler: async (ctx, args) => {
-      const ownerId = normalizeOwnerId(args.ownerId);
-      if (!ownerId) {
-        throw normalizeError(
-          "Missing ownerId: ownerId is required for sessions.releaseAll",
-          "sessions.releaseAll",
-        );
-      }
+      const ownerId = requireOwnerId(args.ownerId, "sessions.releaseAll");
 
-      const now = Date.now();
       const steel = createSteelClient(
         { apiKey: args.apiKey },
         { operation: "sessions.releaseAll" },
@@ -783,6 +797,7 @@ export const sessions = {
                 remoteSession as JsonObject,
                 ownerId,
                 false,
+                releaseNow,
               ),
             );
             const released = {
@@ -832,5 +847,6 @@ export const sessions = {
       };
     },
   }),
+  getInternalByExternalId: getInternalByExternalId,
   upsert: upsertSession,
 };
