@@ -1,8 +1,22 @@
-// Placeholder for steel client factory wiring.
+import Steel from "steel-sdk";
+
 export interface SteelSessionArgs {
-  apiKey: string;
+  apiKey?: string;
 }
 
-export const createSteelClient = (args: SteelSessionArgs) => {
-  return { apiKey: args.apiKey } as const;
+export interface SteelClient {
+  [key: string]: unknown;
+}
+
+const isNonEmptyApiKey = (apiKey: string | undefined): apiKey is string =>
+  typeof apiKey === "string" && apiKey.trim().length > 0;
+
+export const createSteelClient = (args: SteelSessionArgs): SteelClient => {
+  if (!isNonEmptyApiKey(args.apiKey)) {
+    throw new Error(
+      "Missing STEEL API key: pass `apiKey` in action arguments from the app wrapper context.",
+    );
+  }
+
+  return new Steel({ apiKey: args.apiKey.trim() }) as SteelClient;
 };

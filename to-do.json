@@ -161,18 +161,19 @@
         "validation",
         "types"
       ],
-      "updated_at": "2026-03-02T09:25:04Z",
+      "updated_at": "2026-03-02T09:25:09Z",
       "details": "Added shared status/type validation primitives and reusable argument normalizers for ownerId/includeRaw/session status in schema and normalize modules.",
       "files": [
+        "src/component/normalize.ts",
         "src/component/schema.ts",
-        "src/component/normalize.ts"
+        "to-do.json"
       ]
     },
     {
       "id": "T007",
       "title": "Implement steel client factory with boundary-safe API key injection",
       "priority": 1,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T004",
         "T006"
@@ -185,6 +186,13 @@
       "tags": [
         "runtime",
         "client"
+      ],
+      "updated_at": "2026-03-02T09:25:34Z",
+      "details": "Implemented steel client factory with strict key validation and wrapper-side API key resolution/injection. Client actions require an API key in args; wrapper resolves from constructor option first, then process env, with deterministic injection helpers.",
+      "files": [
+        "src/component/steel.ts",
+        "src/client/index.ts",
+        "to-do.json"
       ]
     },
     {
