@@ -1,3 +1,3 @@
-export default {
-  name: 'steel',
-};
+import { defineComponent } from "convex/server";
+
+export default defineComponent("steel");

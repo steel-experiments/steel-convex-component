@@ -45,35 +45,36 @@
       "tags": [
         "scaffold"
       ],
-      "updated_at": "2026-03-02T09:22:39Z",
+      "updated_at": "2026-03-02T09:22:44Z",
       "details": "Initialized component skeleton with source/client/component entry placeholders, module folders, and example/convex scaffold for sessions-first project structure; implementation to be filled in later tasks.",
       "files": [
+        "example/convex/convex.config.ts",
+        "example/convex/schema.ts",
+        "example/convex/steelExample.ts",
         "src/client/index.ts",
-        "src/component/index.ts",
-        "src/component/convex.config.ts",
-        "src/component/schema.ts",
-        "src/component/steel.ts",
-        "src/component/normalize.ts",
-        "src/component/sessions.ts",
-        "src/component/sessionFiles.ts",
         "src/component/captchas.ts",
-        "src/component/profiles.ts",
+        "src/component/convex.config.ts",
         "src/component/credentials.ts",
         "src/component/extensions.ts",
         "src/component/files.ts",
+        "src/component/index.ts",
+        "src/component/normalize.ts",
+        "src/component/profiles.ts",
+        "src/component/schema.ts",
+        "src/component/sessionFiles.ts",
+        "src/component/sessions.ts",
+        "src/component/steel.ts",
         "src/component/topLevel.ts",
         "src/index.ts",
         "src/test.ts",
-        "example/convex/convex.config.ts",
-        "example/convex/schema.ts",
-        "example/convex/steelExample.ts"
+        "to-do.json"
       ]
     },
     {
       "id": "T003",
       "title": "Add TypeScript and Convex build configuration",
       "priority": 1,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T002"
       ],
@@ -85,6 +86,14 @@
       "tags": [
         "build",
         "config"
+      ],
+      "updated_at": "2026-03-02T09:23:44Z",
+      "details": "Added initial TypeScript build configuration plus Convex component/app config wiring so generated component artifacts can be resolved from the example app.",
+      "files": [
+        "tsconfig.json",
+        "src/component/convex.config.ts",
+        "example/convex/convex.config.ts",
+        "example/convex/tsconfig.json"
       ]
     },
     {
