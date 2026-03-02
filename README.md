@@ -185,6 +185,18 @@ npm run codegen
 npm run test
 ```
 
+### Release workflow
+
+```bash
+npm run release:verify
+npm run release
+npm run publish:dry-run
+npm run release:publish
+```
+
+For the full checklist and Convex submission hardening steps, use
+[`RELEASE.md`](RELEASE.md).
+
 The package exports the component config and generated component entry:
 
 - `.` (main library exports, includes `SteelComponent`)
@@ -206,4 +218,3 @@ Built against:
 
 This repository includes unit and integration tests for session lifecycle and tenant
 isolation under `test/`.
-

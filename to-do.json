@@ -748,18 +748,19 @@
       "tags": [
         "documentation"
       ],
-      "updated_at": "2026-03-02T09:45:44Z",
+      "updated_at": "2026-03-02T09:45:52Z",
       "details": "Generated comprehensive README and API reference with setup, tenant/API-key model, and method matrix across sessions, files, captchas, and adjacent modules. Added API.md as the authoritative API reference and documented boundaries, pagination, and persistence behavior.",
       "files": [
+        "API.md",
         "README.md",
-        "API.md"
+        "to-do.json"
       ]
     },
     {
       "id": "T030",
       "title": "Prepare release pipeline and hardening checklist",
       "priority": 5,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T029"
       ],
@@ -770,6 +771,15 @@
       ],
       "tags": [
         "release"
+      ],
+      "updated_at": "2026-03-02T09:46:16Z",
+      "details": "Added release automation scripts, release verification guardrail, and a dedicated release/Convex submission checklist; kept build/typecheck ordering aligned with component codegen requirements.",
+      "files": [
+        "package.json",
+        "scripts/release-verify.js",
+        "RELEASE.md",
+        "README.md",
+        "to-do.json"
       ]
     }
   ]
