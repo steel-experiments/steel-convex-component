@@ -436,7 +436,7 @@
         "sessions",
         "v1"
       ],
-      "updated_at": "2026-03-02T09:32:30Z",
+      "updated_at": "2026-03-02T09:32:46Z",
       "details": "Implemented sessions.liveDetails and sessions.events as owner-protected pass-through actions with raw-by-default responses; liveDetails now optionally persists a lightweight session snapshot for owner-scoped sync.",
       "files": [
         "src/component/sessions.ts",
@@ -573,7 +573,7 @@
       "id": "T025",
       "title": "Build app-facing SteelComponent wrapper with runAction/runQuery/runMutation",
       "priority": 2,
-      "status": "todo",
+      "status": "done",
       "depends_on": [
         "T009",
         "T010",
@@ -588,7 +588,12 @@
       ],
       "tags": [
         "client"
-      ]
+      ],
+      "updated_at": "2026-03-02T09:33:15Z",
+      "files": [
+        "src/client/index.ts"
+      ],
+      "details": "Built app-facing SteelComponent wrapper in src/client/index.ts with runAction/runQuery/runMutation helpers, typed session methods, and apiKey/ownerId context normalization + injection into action/mutation/query args."
     },
     {
       "id": "T026",
