@@ -384,7 +384,7 @@ export interface SteelComponentTopLevelArgs {
 
 export class SteelComponent {
   constructor(
-    public readonly component: SteelComponentFunctions,
+    public readonly component: SteelComponentFunctions | Record<string, any>,
     public readonly options: SteelComponentOptions = {},
   ) {}
 
