@@ -1,4 +1,3 @@
-/// <reference types="vite/client" />
 import { __setTestSteelClientFactory } from "./component/steel";
 
 type SessionStatus = "live" | "released" | "failed";
@@ -627,7 +626,21 @@ export const resetMockSteelClient = (): void => {
   __setTestSteelClientFactory(undefined);
 };
 
-export const componentModules = import.meta.glob("./component/**/*.ts", { eager: false });
+export const componentModules = {
+  "./convex.config.ts": () => import("./component/convex.config.js"),
+  "./schema.ts": () => import("./component/schema.js"),
+  "./sessions.ts": () => import("./component/sessions.js"),
+  "./sessionFiles.ts": () => import("./component/sessionFiles.js"),
+  "./captchas.ts": () => import("./component/captchas.js"),
+  "./profiles.ts": () => import("./component/profiles.js"),
+  "./credentials.ts": () => import("./component/credentials.js"),
+  "./extensions.ts": () => import("./component/extensions.js"),
+  "./files.ts": () => import("./component/files.js"),
+  "./topLevel.ts": () => import("./component/topLevel.js"),
+  "./_generated/api.ts": () => import("./component/_generated/api.js"),
+  "./_generated/server.ts": () => import("./component/_generated/server.js"),
+  "./_generated/dataModel.ts": () => import("./component/_generated/dataModel.js"),
+};
 
 export const register = (
   harness: RegisterHarness,
