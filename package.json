@@ -1,6 +1,6 @@
 {
   "name": "steel-convex-component",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Convex component wrapper for Steel",
   "type": "module",
   "private": false,
