@@ -1,20 +1,16 @@
 import Steel from "steel-sdk";
 import { normalizeError } from "./normalize";
 
-export interface SteelSessionArgs {
-  apiKey?: string;
-}
-
-export type SteelClient = unknown;
-
-export type SteelClientFactory = (
-  args: SteelSessionArgs,
-  options?: SteelClientOptions,
-) => SteelClient;
+export type { Steel };
 
 export interface SteelClientOptions {
   operation?: string;
 }
+
+export type SteelClientFactory = (
+  apiKey: string,
+  options?: SteelClientOptions,
+) => Steel;
 
 const TEST_STEEL_CLIENT_FACTORY_KEY = "__steelComponentTestSteelClientFactory";
 
@@ -29,10 +25,9 @@ const getGlobalTestFactory = (): SteelClientFactory | undefined => {
   return undefined;
 };
 
-const isNonEmptyApiKey = (apiKey: string | undefined): apiKey is string =>
-  typeof apiKey === "string" && apiKey.trim().length > 0;
-
-export const __setTestSteelClientFactory = (factory?: SteelClientFactory): void => {
+export const __setTestSteelClientFactory = (
+  factory?: SteelClientFactory,
+): void => {
   const globalContext = globalThis as { [key: string]: unknown };
   if (factory === undefined) {
     delete globalContext[TEST_STEEL_CLIENT_FACTORY_KEY];
@@ -43,10 +38,11 @@ export const __setTestSteelClientFactory = (factory?: SteelClientFactory): void 
 };
 
 export const createSteelClient = (
-  args: SteelSessionArgs,
+  apiKey: string,
   options: SteelClientOptions = {},
-): SteelClient => {
-  if (!isNonEmptyApiKey(args.apiKey)) {
+): Steel => {
+  const trimmed = apiKey.trim();
+  if (!trimmed) {
     throw normalizeError(
       "Missing STEEL API key: pass `apiKey` in action arguments from the app wrapper context.",
       options.operation ?? "steel.client",
@@ -55,8 +51,8 @@ export const createSteelClient = (
 
   const testFactory = getGlobalTestFactory();
   if (testFactory) {
-    return testFactory(args, options);
+    return testFactory(trimmed, options);
   }
 
-  return new Steel({ steelAPIKey: args.apiKey.trim() }) as unknown as SteelClient;
+  return new Steel({ steelAPIKey: trimmed });
 };

@@ -1,3 +1,5 @@
+import { sessionStatusValues, type SessionStatus } from "./schema";
+
 export interface StructuredErrorContract {
   provider: "steel";
   message: string;
@@ -17,96 +19,54 @@ const RETRYABLE_ERROR_CODES = new Set([
   "ENOTFOUND",
   "NETWORK_ERROR",
   "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_CONNECT_TIMEOUT",
 ]);
 
 type ErrorLike = Record<string, unknown>;
-
-const toString = (value: unknown): string | undefined => {
-  if (typeof value === "string") {
-    const normalized = value.trim();
-    if (normalized.length > 0) {
-      return normalized;
-    }
-  }
-
-  return undefined;
-};
 
 const toNumber = (value: unknown): number | undefined => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
-
   return undefined;
 };
 
-const normalizeErrorCode = (value: unknown): string | undefined => {
-  const normalized = toString(value)?.toUpperCase();
-  if (!normalized) {
-    return undefined;
-  }
-
-  return normalized;
-};
-
 const extractErrorStatus = (error: ErrorLike): number | undefined => {
-  const candidates = [
+  for (const candidate of [
     toNumber(error.status),
     toNumber(error.statusCode),
     error.response && typeof error.response === "object"
       ? toNumber((error.response as ErrorLike).status)
       : undefined,
-    error.response && typeof error.response === "object"
-      ? toNumber((error.response as ErrorLike).statusCode)
-      : undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate !== undefined) {
-      return candidate;
-    }
+  ]) {
+    if (candidate !== undefined) return candidate;
   }
-
   return undefined;
 };
 
 const extractErrorCode = (error: ErrorLike): string | undefined => {
-  const candidates = [
-    normalizeErrorCode(error.code),
-    error.cause && typeof error.cause === "object"
-      ? normalizeErrorCode((error.cause as ErrorLike).code)
-      : undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate) {
-      return candidate;
+  for (const source of [error, error.cause]) {
+    if (source && typeof source === "object") {
+      const code = (source as ErrorLike).code;
+      if (typeof code === "string" && code.trim()) {
+        return code.trim().toUpperCase();
+      }
     }
   }
-
   return undefined;
 };
 
-const isRetryableMessage = (message: string | undefined): boolean => {
-  if (!message) {
-    return false;
-  }
-
-  return ["timeout", "timed out", "network", "temporary", "retry"].some((segment) =>
-    message.toLowerCase().includes(segment),
+const isRetryableMessage = (message: string): boolean =>
+  ["timeout", "timed out", "network", "temporary", "retry"].some((s) =>
+    message.toLowerCase().includes(s),
   );
-};
 
-const shouldRetry = (status: number | undefined, code: string | undefined, message: string): boolean => {
-  if (status !== undefined && RETRYABLE_HTTP_STATUSES.has(status)) {
-    return true;
-  }
-
-  if (code && (RETRYABLE_ERROR_CODES.has(code) || code.startsWith("E"))) {
-    return true;
-  }
-
+const shouldRetry = (
+  status: number | undefined,
+  code: string | undefined,
+  message: string,
+): boolean => {
+  if (status !== undefined && RETRYABLE_HTTP_STATUSES.has(status)) return true;
+  if (code && RETRYABLE_ERROR_CODES.has(code)) return true;
   return isRetryableMessage(message);
 };
 
@@ -139,16 +99,23 @@ export class StructuredError extends Error {
   }
 }
 
-export const normalizeError = (error: unknown, operation: string): StructuredError => {
+export const normalizeError = (
+  error: unknown,
+  operation: string,
+): StructuredError => {
   if (error instanceof StructuredError) {
     return error;
   }
 
-  const message = toString(error instanceof Error ? error.message : error) ?? `steel operation failed: ${operation}`;
-  const structuredError = error instanceof Error ? error as Error & ErrorLike : error;
-  const errorRecord = typeof structuredError === "object" && structuredError !== null
-    ? (structuredError as ErrorLike)
-    : {};
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : undefined;
+  const message = rawMessage?.trim() || `steel operation failed: ${operation}`;
+  const errorRecord =
+    typeof error === "object" && error !== null ? (error as ErrorLike) : {};
 
   const status = extractErrorStatus(errorRecord);
   const code = extractErrorCode(errorRecord);
@@ -163,7 +130,30 @@ export const normalizeError = (error: unknown, operation: string): StructuredErr
   });
 };
 
-import { sessionStatusValues, type SessionStatus } from "./schema";
+export function requireOwnerId(
+  ownerId: string | undefined,
+  operation: string,
+): string {
+  const normalized = ownerId?.trim();
+  if (!normalized) {
+    throw normalizeError(
+      `Missing ownerId: ownerId is required for ${operation}`,
+      operation,
+    );
+  }
+  return normalized;
+}
+
+export async function runWithNormalizedError<T>(
+  operation: string,
+  handler: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await handler();
+  } catch (error) {
+    throw normalizeError(error, operation);
+  }
+}
 
 const sessionStatusLookup = new Set(sessionStatusValues);
 
@@ -171,19 +161,20 @@ export function normalizeSessionStatus(status: string): SessionStatus {
   if (!sessionStatusLookup.has(status as SessionStatus)) {
     throw new Error(`Invalid session status: ${status}`);
   }
-
   return status as SessionStatus;
-}
-
-export function normalizeOwnerId(ownerId?: string): string | undefined {
-  const normalized = ownerId?.trim();
-  if (!normalized) {
-    return undefined;
-  }
-
-  return normalized;
 }
 
 export function normalizeIncludeRaw(includeRaw: boolean | undefined): boolean {
   return includeRaw ?? false;
+}
+
+export function toTimestamp(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = Date.parse(trimmed);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
 }

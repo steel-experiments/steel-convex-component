@@ -3,174 +3,20 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 import { createSteelClient } from "./steel";
-import { normalizeError, normalizeOwnerId } from "./normalize";
+import {
+  normalizeError,
+  requireOwnerId,
+  runWithNormalizedError,
+  toTimestamp,
+} from "./normalize";
 
-type JsonObject = Record<string, unknown>;
-
-type SteelCaptchasClient = {
-  sessions?: {
-    captchas?: {
-      status?: (sessionId: string) => Promise<unknown>;
-      solve?: (sessionId: string, body?: Record<string, unknown>) => Promise<unknown>;
-      solveImage?: (sessionId: string, body: Record<string, unknown>) => Promise<unknown>;
-    };
-  };
-};
-
-interface CaptchaStatusArgs {
-  sessionExternalId: string;
-  pageId: string;
-  url: string;
-  isSolvingCaptcha: boolean;
-  lastUpdated: number;
-}
-
-const requireOwnerId = (ownerId: string | undefined, operation: string): string => {
-  const normalized = normalizeOwnerId(ownerId);
-  if (!normalized) {
-    throw normalizeError(`Missing ownerId: ownerId is required for ${operation}`, operation);
-  }
-
-  return normalized;
-};
-
-const runWithNormalizedError = async <T>(
-  operation: string,
-  handler: () => Promise<T>,
-): Promise<T> => {
-  try {
-    return await handler();
-  } catch (error) {
-    throw normalizeError(error, operation);
-  }
-};
-
-const normalizeWithError = <T>(operation: string, handler: () => T): T => {
-  try {
-    return handler();
-  } catch (error) {
-    throw normalizeError(error, operation);
-  }
-};
-
-const pickFirstString = (value: JsonObject, keys: string[]): string | undefined => {
-  for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "string") {
-      const normalized = candidate.trim();
-      if (normalized.length > 0) {
-        return normalized;
-      }
-    }
-  }
-
-  return undefined;
-};
-
-const pickFirstBoolean = (value: JsonObject, keys: string[]): boolean | undefined => {
-  for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "boolean") {
-      return candidate;
-    }
-  }
-
-  return undefined;
-};
-
-const toTimestamp = (value: unknown): number | undefined => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed.length) {
-      return undefined;
-    }
-
-    const numeric = Number(trimmed);
-    if (Number.isFinite(numeric)) {
-      return numeric;
-    }
-
-    const parsed = Date.parse(trimmed);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
-};
-
-const pickFirstTimestamp = (value: JsonObject, keys: string[]): number | undefined => {
-  for (const key of keys) {
-    const candidate = toTimestamp(value[key]);
-    if (candidate !== undefined) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-};
-
-const normalizeCaptchaStatusPayload = (
-  payload: JsonObject,
-  sessionExternalId: string,
-  syncedAt: number,
-): CaptchaStatusArgs => {
-  const resolvedPageId = pickFirstString(payload, ["pageId", "page_id"]);
-  if (!resolvedPageId) {
-    throw normalizeError("Captcha status payload missing pageId", "captchas.status");
-  }
-
-  const url = pickFirstString(payload, ["url", "captchaUrl", "pageUrl", "page_url"]) ?? "";
-
-  return {
-    sessionExternalId,
-    pageId: resolvedPageId,
-    url,
-    isSolvingCaptcha:
-      pickFirstBoolean(payload, ["isSolvingCaptcha", "is_solving_captcha", "solving", "isSolving"]) ?? false,
-    lastUpdated:
-      pickFirstTimestamp(payload, ["lastUpdated", "last_updated", "updatedAt", "updated_at", "created"]) ??
-      syncedAt,
-  };
-};
-
-const normalizeStatusResponse = (operation: string, payload: unknown): JsonObject[] => {
-  if (Array.isArray(payload)) {
-    return payload.filter((item): item is JsonObject => typeof item === "object" && item !== null);
-  }
-
-  if (payload && typeof payload === "object") {
-    const envelope = payload as JsonObject;
-    if (Array.isArray(envelope.items)) {
-      return envelope.items.filter((item): item is JsonObject => typeof item === "object" && item !== null);
-    }
-    if (Array.isArray(envelope.data)) {
-      return envelope.data.filter((item): item is JsonObject => typeof item === "object" && item !== null);
-    }
-  }
-
-  throw normalizeError("Invalid response from Steel sessions.captchas.status", operation);
-};
-
-const normalizeSolvePayload = (
-  args: {
-    pageId?: string;
-    url?: string;
-    taskId?: string;
-    commandArgs?: Record<string, unknown>;
-  },
-): Record<string, unknown> => {
-  return {
-    ...(args.commandArgs ?? {}),
-    ...(args.pageId ? { pageId: args.pageId } : {}),
-    ...(args.url ? { url: args.url } : {}),
-    ...(args.taskId ? { taskId: args.taskId } : {}),
-  };
-};
+import type {
+  CaptchaStatusResponse,
+  CaptchaSolveResponse,
+  CaptchaSolveImageResponse,
+  CaptchaSolveParams,
+  CaptchaSolveImageParams,
+} from "steel-sdk/resources/sessions/captchas";
 
 const upsertCaptchaState = internalMutation({
   args: {
@@ -185,7 +31,9 @@ const upsertCaptchaState = internalMutation({
     const current = await ctx.db
       .query("captchaStates")
       .withIndex("bySessionExternalIdAndPageId", (q) =>
-        q.eq("sessionExternalId", args.sessionExternalId).eq("pageId", args.pageId),
+        q
+          .eq("sessionExternalId", args.sessionExternalId)
+          .eq("pageId", args.pageId),
       )
       .unique();
 
@@ -208,42 +56,30 @@ const upsertCaptchaState = internalMutation({
 const runCaptchaStatus = async (
   steel: ReturnType<typeof createSteelClient>,
   sessionExternalId: string,
-) => {
-  const client = steel as SteelCaptchasClient;
-  const method = client.sessions?.captchas?.status;
-  if (!method) {
-    throw normalizeError("Steel sessions.captchas.status is not available", "captchas.status");
-  }
-
-  return runWithNormalizedError("captchas.status", () => method(sessionExternalId));
+): Promise<CaptchaStatusResponse> => {
+  return runWithNormalizedError("captchas.status", () =>
+    steel.sessions.captchas.status(sessionExternalId),
+  );
 };
 
 const runCaptchaSolve = async (
   steel: ReturnType<typeof createSteelClient>,
   sessionExternalId: string,
-  payload: Record<string, unknown>,
-) => {
-  const client = steel as SteelCaptchasClient;
-  const method = client.sessions?.captchas?.solve;
-  if (!method) {
-    throw normalizeError("Steel sessions.captchas.solve is not available", "captchas.solve");
-  }
-
-  return runWithNormalizedError("captchas.solve", () => method(sessionExternalId, payload));
+  params: CaptchaSolveParams,
+): Promise<CaptchaSolveResponse> => {
+  return runWithNormalizedError("captchas.solve", () =>
+    steel.sessions.captchas.solve(sessionExternalId, params),
+  );
 };
 
 const runCaptchaSolveImage = async (
   steel: ReturnType<typeof createSteelClient>,
   sessionExternalId: string,
-  payload: Record<string, unknown>,
-) => {
-  const client = steel as SteelCaptchasClient;
-  const method = client.sessions?.captchas?.solveImage;
-  if (!method) {
-    throw normalizeError("Steel sessions.captchas.solveImage is not available", "captchas.solveImage");
-  }
-
-  return runWithNormalizedError("captchas.solveImage", () => method(sessionExternalId, payload));
+  params: CaptchaSolveImageParams,
+): Promise<CaptchaSolveImageResponse> => {
+  return runWithNormalizedError("captchas.solveImage", () =>
+    steel.sessions.captchas.solveImage(sessionExternalId, params),
+  );
 };
 
 export const captchas = {
@@ -258,28 +94,28 @@ export const captchas = {
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "captchas.status");
       const syncedAt = Date.now();
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "captchas.status" },
-      );
+      const steel = createSteelClient(args.apiKey, {
+        operation: "captchas.status",
+      });
 
-      const payload = await runCaptchaStatus(steel, args.sessionExternalId);
-      const states = normalizeWithError("captchas.status", () =>
-        normalizeStatusResponse("captchas.status", payload),
-      );
+      const states = await runCaptchaStatus(steel, args.sessionExternalId);
 
       if (args.persistSnapshot) {
         for (const state of states) {
-          const snapshot = normalizeWithError("captchas.status", () =>
-            normalizeCaptchaStatusPayload(state, args.sessionExternalId, syncedAt),
-          );
-          if (args.pageId && snapshot.pageId !== args.pageId) {
+          if (args.pageId && state.pageId !== args.pageId) {
             continue;
           }
 
           await runWithNormalizedError("captchas.upsert", () =>
             ctx.runMutation(internal.captchas.upsert, {
-              ...snapshot,
+              sessionExternalId: args.sessionExternalId,
+              pageId: state.pageId,
+              url: state.url,
+              isSolvingCaptcha: state.isSolvingCaptcha,
+              lastUpdated:
+                toTimestamp(state.lastUpdated) ??
+                toTimestamp(state.created) ??
+                syncedAt,
               ownerId,
             }),
           );
@@ -287,13 +123,10 @@ export const captchas = {
       }
 
       if (args.pageId) {
-        return states.find((state) => {
-          const pageId = pickFirstString(state, ["pageId", "page_id"]);
-          return pageId === args.pageId;
-        }) ?? null;
+        return states.find((state) => state.pageId === args.pageId) ?? null;
       }
 
-      return payload;
+      return states;
     },
   }),
   solve: action({
@@ -309,21 +142,18 @@ export const captchas = {
     handler: async (_ctx, args) => {
       requireOwnerId(args.ownerId, "captchas.solve");
 
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "captchas.solve" },
-      );
+      const steel = createSteelClient(args.apiKey, {
+        operation: "captchas.solve",
+      });
 
-      return runCaptchaSolve(
-        steel,
-        args.sessionExternalId,
-        normalizeSolvePayload({
-          pageId: args.pageId,
-          url: args.url,
-          taskId: args.taskId,
-          commandArgs: args.commandArgs,
-        }),
-      );
+      const params: CaptchaSolveParams = {
+        ...(args.commandArgs ?? {}),
+        ...(args.pageId ? { pageId: args.pageId } : {}),
+        ...(args.url ? { url: args.url } : {}),
+        ...(args.taskId ? { taskId: args.taskId } : {}),
+      };
+
+      return runCaptchaSolve(steel, args.sessionExternalId, params);
     },
   }),
   solveImage: action({
@@ -339,17 +169,18 @@ export const captchas = {
     handler: async (_ctx, args) => {
       requireOwnerId(args.ownerId, "captchas.solveImage");
 
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "captchas.solveImage" },
-      );
+      const steel = createSteelClient(args.apiKey, {
+        operation: "captchas.solveImage",
+      });
 
-      return runCaptchaSolveImage(steel, args.sessionExternalId, {
+      const params: CaptchaSolveImageParams = {
         ...(args.commandArgs ?? {}),
         imageXPath: args.imageXPath,
         inputXPath: args.inputXPath,
         ...(args.url ? { url: args.url } : {}),
-      });
+      };
+
+      return runCaptchaSolveImage(steel, args.sessionExternalId, params);
     },
   }),
   upsert: upsertCaptchaState,

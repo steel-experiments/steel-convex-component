@@ -4,39 +4,12 @@ import { v } from "convex/values";
 import { createSteelClient } from "./steel";
 import {
   normalizeError,
-  normalizeOwnerId,
+  requireOwnerId,
+  runWithNormalizedError,
 } from "./normalize";
-
-type JsonObject = Record<string, unknown>;
-
-type SteelTopLevelClient = {
-  screenshot?: (args: Record<string, unknown>) => Promise<unknown>;
-  scrape?: (args: Record<string, unknown>) => Promise<unknown>;
-  pdf?: (args: Record<string, unknown>) => Promise<unknown>;
-};
 
 const MIN_DELAY_MS = 0;
 const MAX_DELAY_MS = 120000;
-
-const requireOwnerId = (ownerId: string | undefined, operation: string): string => {
-  const normalized = normalizeOwnerId(ownerId);
-  if (!normalized) {
-    throw normalizeError(`Missing ownerId: ownerId is required for ${operation}`, operation);
-  }
-
-  return normalized;
-};
-
-const runWithNormalizedError = async <T>(
-  operation: string,
-  handler: () => Promise<T>,
-): Promise<T> => {
-  try {
-    return await handler();
-  } catch (error) {
-    throw normalizeError(error, operation);
-  }
-};
 
 const normalizeUrl = (value: unknown, operation: string): string => {
   if (typeof value !== "string") {
@@ -45,7 +18,10 @@ const normalizeUrl = (value: unknown, operation: string): string => {
 
   const normalized = value.trim();
   if (!normalized) {
-    throw normalizeError(`URL must be a non-empty string for ${operation}`, operation);
+    throw normalizeError(
+      `URL must be a non-empty string for ${operation}`,
+      operation,
+    );
   }
 
   try {
@@ -56,7 +32,10 @@ const normalizeUrl = (value: unknown, operation: string): string => {
 
     return parsed.toString();
   } catch {
-    throw normalizeError(`URL must be a valid HTTP(S) URL for ${operation}`, operation);
+    throw normalizeError(
+      `URL must be a valid HTTP(S) URL for ${operation}`,
+      operation,
+    );
   }
 };
 
@@ -71,7 +50,10 @@ const normalizeDelay = (
   }
 
   if (!Number.isFinite(value)) {
-    throw normalizeError(`delay must be a finite number for ${operation}`, operation);
+    throw normalizeError(
+      `delay must be a finite number for ${operation}`,
+      operation,
+    );
   }
 
   const normalized = Math.floor(value);
@@ -83,48 +65,6 @@ const normalizeDelay = (
   }
 
   return normalized;
-};
-
-const normalizeUtilityArgs = (
-  args: Record<string, unknown> | undefined,
-  operation: string,
-): JsonObject => {
-  if (!args) {
-    return {};
-  }
-
-  if (typeof args !== "object" || Array.isArray(args)) {
-    throw normalizeError(`Invalid utility arguments for ${operation}`, operation);
-  }
-
-  return { ...args };
-};
-
-const buildPayload = (
-  url: string,
-  delay: number | undefined,
-  commandArgs: Record<string, unknown> | undefined,
-): JsonObject => {
-  return {
-    ...(commandArgs ?? {}),
-    url,
-    ...(delay !== undefined ? { delay } : {}),
-  };
-};
-
-const callSteelTopLevel = async (
-  operation: "steel.screenshot" | "steel.scrape" | "steel.pdf",
-  method: "screenshot" | "scrape" | "pdf",
-  steel: ReturnType<typeof createSteelClient>,
-  payload: Record<string, unknown>,
-) => {
-  const client = steel as SteelTopLevelClient;
-  const target = client[method];
-  if (!target) {
-    throw normalizeError(`Steel ${method} is not available`, operation);
-  }
-
-  return runWithNormalizedError(operation, () => target(payload));
 };
 
 export const steel = {
@@ -141,16 +81,23 @@ export const steel = {
       requireOwnerId(args.ownerId, "steel.screenshot");
 
       const normalizedUrl = normalizeUrl(args.url, "steel.screenshot");
-      const delay = normalizeDelay(args.delay, args.timeout, "steel.screenshot");
-      const commandArgs = normalizeUtilityArgs(args.commandArgs, "steel.screenshot");
-      const payload = buildPayload(normalizedUrl, delay, commandArgs);
-
-      const client = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "steel.screenshot" },
+      const delay = normalizeDelay(
+        args.delay,
+        args.timeout,
+        "steel.screenshot",
       );
 
-      return callSteelTopLevel("steel.screenshot", "screenshot", client, payload);
+      const client = createSteelClient(args.apiKey, {
+        operation: "steel.screenshot",
+      });
+
+      return runWithNormalizedError("steel.screenshot", () =>
+        client.screenshot({
+          url: normalizedUrl,
+          ...(args.commandArgs ?? {}),
+          ...(delay !== undefined ? { delay } : {}),
+        }),
+      );
     },
   }),
   scrape: action({
@@ -167,15 +114,18 @@ export const steel = {
 
       const normalizedUrl = normalizeUrl(args.url, "steel.scrape");
       const delay = normalizeDelay(args.delay, args.timeout, "steel.scrape");
-      const commandArgs = normalizeUtilityArgs(args.commandArgs, "steel.scrape");
-      const payload = buildPayload(normalizedUrl, delay, commandArgs);
 
-      const client = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "steel.scrape" },
+      const client = createSteelClient(args.apiKey, {
+        operation: "steel.scrape",
+      });
+
+      return runWithNormalizedError("steel.scrape", () =>
+        client.scrape({
+          url: normalizedUrl,
+          ...(args.commandArgs ?? {}),
+          ...(delay !== undefined ? { delay } : {}),
+        }),
       );
-
-      return callSteelTopLevel("steel.scrape", "scrape", client, payload);
     },
   }),
   pdf: action({
@@ -192,15 +142,16 @@ export const steel = {
 
       const normalizedUrl = normalizeUrl(args.url, "steel.pdf");
       const delay = normalizeDelay(args.delay, args.timeout, "steel.pdf");
-      const commandArgs = normalizeUtilityArgs(args.commandArgs, "steel.pdf");
-      const payload = buildPayload(normalizedUrl, delay, commandArgs);
 
-      const client = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "steel.pdf" },
+      const client = createSteelClient(args.apiKey, { operation: "steel.pdf" });
+
+      return runWithNormalizedError("steel.pdf", () =>
+        client.pdf({
+          url: normalizedUrl,
+          ...(args.commandArgs ?? {}),
+          ...(delay !== undefined ? { delay } : {}),
+        }),
       );
-
-      return callSteelTopLevel("steel.pdf", "pdf", client, payload);
     },
   }),
 };

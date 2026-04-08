@@ -1,3 +1,4 @@
+import type Steel from "steel-sdk";
 import { __setTestSteelClientFactory } from "./component/steel";
 
 type SessionStatus = "live" | "released" | "failed";
@@ -28,68 +29,6 @@ export type MockSteelCall = { method: string; args: unknown[] };
 
 interface MockSteelClientCalls {
   [namespace: string]: MockSteelCall[];
-}
-
-interface MockSteelClient {
-  sessions: {
-    create: (args: Record<string, unknown>) => Promise<SteelSessionRecord>;
-    retrieve: (externalId: string) => Promise<SteelSessionRecord>;
-    get: (externalId: string) => Promise<SteelSessionRecord>;
-    list: (
-      query: Record<string, unknown>,
-    ) => Promise<{ items: unknown[]; hasMore: boolean; continuation?: string }>;
-    release: (externalId: string) => Promise<SteelSessionRecord>;
-    computer: (externalId: string, commandArgs: Record<string, unknown>) => Promise<unknown>;
-    context: (externalId: string) => Promise<unknown>;
-    liveDetails: (externalId: string) => Promise<Record<string, unknown>>;
-    events: (externalId: string) => Promise<unknown>;
-    files: {
-      list: (sessionId: string) => Promise<{ data: unknown[] }>;
-      upload: (sessionId: string, args: Record<string, unknown>) => Promise<unknown>;
-      delete: (sessionId: string, path: string) => Promise<unknown>;
-      deleteAll: (sessionId: string) => Promise<unknown>;
-    };
-    captchas: {
-      status: (sessionId: string) => Promise<unknown>;
-      solve: (sessionId: string, args?: Record<string, unknown>) => Promise<unknown>;
-      solveImage: (sessionId: string, args: Record<string, unknown>) => Promise<unknown>;
-    };
-  };
-  profiles?: {
-    list: () => Promise<unknown>;
-    get: (externalId: string) => Promise<unknown>;
-    create: (payload: Record<string, unknown>) => Promise<unknown>;
-    update: (externalId: string, payload: Record<string, unknown>) => Promise<unknown>;
-  };
-  credentials?: {
-    create: (payload: Record<string, unknown>) => Promise<unknown>;
-    update: (payload: Record<string, unknown>) => Promise<unknown>;
-    list: (query: Record<string, unknown>) => Promise<unknown>;
-    delete: (payload: Record<string, unknown>) => Promise<unknown>;
-  };
-  extensions?: {
-    list: () => Promise<unknown>;
-    upload: (payload: Record<string, unknown>) => Promise<unknown>;
-    update: (externalId: string, payload: Record<string, unknown>) => Promise<unknown>;
-    delete: (externalId: string) => Promise<unknown>;
-    deleteAll: () => Promise<unknown>;
-    download: (externalId: string) => Promise<unknown>;
-  };
-  files?: {
-    list: () => Promise<unknown>;
-    upload: (payload: Record<string, unknown>) => Promise<unknown>;
-    delete: (path: string) => Promise<unknown>;
-    download: (path: string) => Promise<unknown>;
-  };
-  screenshot?: (args: Record<string, unknown>) => Promise<unknown>;
-  scrape?: (args: Record<string, unknown>) => Promise<unknown>;
-  pdf?: (args: Record<string, unknown>) => Promise<unknown>;
-  steel?: {
-    screenshot?: (args: Record<string, unknown>) => Promise<unknown>;
-    scrape?: (args: Record<string, unknown>) => Promise<unknown>;
-    pdf?: (args: Record<string, unknown>) => Promise<unknown>;
-  };
-  __calls: MockSteelClientCalls;
 }
 
 export interface SessionsFixture {
@@ -191,7 +130,13 @@ export const sessionFixtures = {
     },
     invalidRemoteStatus: {
       externalId: "session-live-001",
-      payload: { status: "invalid", externalId: "session-live-001", createdAt: 1, updatedAt: 1, lastSyncedAt: 1 },
+      payload: {
+        status: "invalid",
+        externalId: "session-live-001",
+        createdAt: 1,
+        updatedAt: 1,
+        lastSyncedAt: 1,
+      },
       expectedErrorContains: "Invalid session status",
     },
   },
@@ -211,7 +156,8 @@ export const validationFixtures = {
     },
     getRequiresOwnerIdInActions: {
       args: { externalId: "session-live-001", ownerId: "", apiKey: "k" },
-      expectedError: "Missing ownerId: ownerId is required for sessions.refresh",
+      expectedError:
+        "Missing ownerId: ownerId is required for sessions.refresh",
     },
     refreshManyInvalidLimit: {
       args: { status: "live", ownerId: "owner", apiKey: "k", limit: 99999 },
@@ -221,7 +167,10 @@ export const validationFixtures = {
 };
 
 type RegisterHarness = {
-  registerComponent?: (componentName: string, modules: Record<string, unknown>) => unknown;
+  registerComponent?: (
+    componentName: string,
+    modules: Record<string, unknown>,
+  ) => unknown;
   register?: (modules: Record<string, unknown>) => unknown;
 };
 
@@ -231,7 +180,9 @@ const clampListLimit = (value: number | undefined): number =>
   Math.max(
     1,
     Math.min(
-      typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 50,
+      typeof value === "number" && Number.isFinite(value)
+        ? Math.floor(value)
+        : 50,
       100,
     ),
   );
@@ -241,12 +192,16 @@ const createSession = (
   base: SessionFixture,
 ): SessionFixture => {
   const status =
-    request.status === "live" || request.status === "released" || request.status === "failed"
+    request.status === "live" ||
+    request.status === "released" ||
+    request.status === "failed"
       ? request.status
       : base.status;
-  const externalId = typeof request.externalId === "string" && request.externalId.trim().length > 0
-    ? request.externalId.trim()
-    : base.externalId;
+  const externalId =
+    typeof request.externalId === "string" &&
+    request.externalId.trim().length > 0
+      ? request.externalId.trim()
+      : base.externalId;
 
   return {
     ...base,
@@ -268,7 +223,7 @@ const createSession = (
 
 export const createMockSteelClient = (
   options: MockSteelClientOptions = {},
-): MockSteelClient => {
+): Steel & { __calls: MockSteelClientCalls } => {
   const baselineNow = sessionFixtures.now;
   const store = new Map<string, SteelSessionRecord>();
   const calls: MockSteelClientCalls = {
@@ -294,14 +249,16 @@ export const createMockSteelClient = (
     ...(record as Record<string, unknown>),
   });
 
-  const seedSessions = (options.sessions ?? sessionFixtures.list).map((session) => {
-    const seeded = {
-      ...buildRecord(session),
-      ownerId: sessionFixtures.ownerId,
-    };
-    store.set(session.externalId, seeded);
-    return session.externalId;
-  });
+  const seedSessions = (options.sessions ?? sessionFixtures.list).map(
+    (session) => {
+      const seeded = {
+        ...buildRecord(session),
+        ownerId: sessionFixtures.ownerId,
+      };
+      store.set(session.externalId, seeded);
+      return session.externalId;
+    },
+  );
 
   if (!seedSessions.length) {
     const live = {
@@ -316,7 +273,8 @@ export const createMockSteelClient = (
       calls.sessions.push({ method: "create", args: [request] });
       const incoming = createSession(request, sessionFixtures.create);
       const externalId =
-        typeof request.externalId === "string" && request.externalId.trim().length > 0
+        typeof request.externalId === "string" &&
+        request.externalId.trim().length > 0
           ? request.externalId.trim()
           : `${incoming.externalId}-${sequence + 1}`;
       const record: SteelSessionRecord = {
@@ -353,17 +311,25 @@ export const createMockSteelClient = (
     list: async (query: Record<string, unknown>) => {
       calls.sessions.push({ method: "list", args: [query] });
       const status = query.status as SessionStatus | undefined;
-      const limit = clampListLimit(typeof query.limit === "number" ? query.limit : undefined);
-      const cursor = typeof query.cursor === "string" ? Number.parseInt(query.cursor, 10) : 0;
+      const limit = clampListLimit(
+        typeof query.limit === "number" ? query.limit : undefined,
+      );
+      const cursor =
+        typeof query.cursorId === "string"
+          ? Number.parseInt(query.cursorId, 10)
+          : 0;
       const all = [...store.values()]
         .filter((record) => (status ? record.status === status : true))
         .sort((a, b) => b.updatedAt - a.updatedAt);
 
       const page = all.slice(cursor, cursor + limit);
+      const _hasMore = cursor + limit < all.length;
+      const nextCursorId = _hasMore ? String(cursor + limit) : undefined;
       return {
-        items: page.map((item) => clone(item)),
-        hasMore: cursor + limit < all.length,
-        continuation: cursor + limit < all.length ? String(cursor + limit) : undefined,
+        sessions: page.map((item) => clone({ ...item, id: item.externalId })),
+        hasNextPage: () => _hasMore,
+        nextPageInfo: () =>
+          nextCursorId ? { params: { cursorId: nextCursorId } } : null,
       };
     },
     release: async (externalId: string) => {
@@ -382,8 +348,14 @@ export const createMockSteelClient = (
       store.set(externalId, released);
       return clone(released);
     },
-    computer: async (externalId: string, commandArgs: Record<string, unknown>) => {
-      calls.sessions.push({ method: "computer", args: [externalId, commandArgs] });
+    computer: async (
+      externalId: string,
+      commandArgs: Record<string, unknown>,
+    ) => {
+      calls.sessions.push({
+        method: "computer",
+        args: [externalId, commandArgs],
+      });
       return {
         action: "computer",
         sessionId: externalId,
@@ -401,10 +373,11 @@ export const createMockSteelClient = (
     },
     liveDetails: async (externalId: string) => {
       calls.sessions.push({ method: "liveDetails", args: [externalId] });
-      const current = store.get(externalId) ?? store.values().next().value ?? {
-        ...buildRecord(sessionFixtures.create),
-        ownerId: sessionFixtures.ownerId,
-      };
+      const current = store.get(externalId) ??
+        store.values().next().value ?? {
+          ...buildRecord(sessionFixtures.create),
+          ownerId: sessionFixtures.ownerId,
+        };
       return clone({
         externalId: current.externalId,
         sessionId: current.externalId,
@@ -469,41 +442,58 @@ export const createMockSteelClient = (
         calls.profiles.push({ method: "list", args: [] });
         return { profiles: [] };
       },
-      get: async (externalId) => {
+      get: async (externalId: string) => {
         calls.profiles.push({ method: "get", args: [externalId] });
-        return { id: externalId, userDataDir: "https://storage.example.com/profile.json" };
+        return {
+          id: externalId,
+          userDataDir: "https://storage.example.com/profile.json",
+        };
       },
-      create: async (payload) => {
+      create: async (payload: Record<string, unknown>) => {
         calls.profiles.push({ method: "create", args: [payload] });
-        return { id: "profile-new", ...(payload as Record<string, unknown>) };
+        return { id: "profile-new", ...payload };
       },
-      update: async (externalId, payload) => {
+      update: async (externalId: string, payload: Record<string, unknown>) => {
         calls.profiles.push({ method: "update", args: [externalId, payload] });
-        return { id: externalId, ...(payload as Record<string, unknown>) };
+        return { id: externalId, ...payload };
       },
     },
     credentials: {
-      create: async (payload) => {
+      create: async (payload: Record<string, unknown>) => {
         calls.credentials.push({ method: "create", args: [payload] });
         return {
-          label: typeof payload.label === "string" ? payload.label : "credential",
-          origin: typeof payload.origin === "string" ? payload.origin : "https://example.com",
-          namespace: typeof payload.namespace === "string" ? payload.namespace : "default",
+          label:
+            typeof payload.label === "string" ? payload.label : "credential",
+          origin:
+            typeof payload.origin === "string"
+              ? payload.origin
+              : "https://example.com",
+          namespace:
+            typeof payload.namespace === "string"
+              ? payload.namespace
+              : "default",
           createdAt: new Date(now()).toISOString(),
           updatedAt: new Date(now()).toISOString(),
         };
       },
-      update: async (payload) => {
+      update: async (payload: Record<string, unknown>) => {
         calls.credentials.push({ method: "update", args: [payload] });
         return {
-          label: typeof payload.label === "string" ? payload.label : "credential",
-          origin: typeof payload.origin === "string" ? payload.origin : "https://example.com",
-          namespace: typeof payload.namespace === "string" ? payload.namespace : "default",
+          label:
+            typeof payload.label === "string" ? payload.label : "credential",
+          origin:
+            typeof payload.origin === "string"
+              ? payload.origin
+              : "https://example.com",
+          namespace:
+            typeof payload.namespace === "string"
+              ? payload.namespace
+              : "default",
           createdAt: new Date(now()).toISOString(),
           updatedAt: new Date(now()).toISOString(),
         };
       },
-      list: async (query) => {
+      list: async (query: Record<string, unknown>) => {
         calls.credentials.push({ method: "list", args: [query] });
         return {
           credentials: [
@@ -517,7 +507,7 @@ export const createMockSteelClient = (
           ],
         };
       },
-      delete: async (payload) => {
+      delete: async (payload: Record<string, unknown>) => {
         calls.credentials.push({ method: "delete", args: [payload] });
         return { success: true };
       },
@@ -527,7 +517,7 @@ export const createMockSteelClient = (
         calls.extensions.push({ method: "list", args: [] });
         return { count: 0, extensions: [] };
       },
-      upload: async (payload) => {
+      upload: async (payload: Record<string, unknown>) => {
         calls.extensions.push({ method: "upload", args: [payload] });
         return {
           id: "ext-new",
@@ -536,8 +526,11 @@ export const createMockSteelClient = (
           updatedAt: new Date(now()).toISOString(),
         };
       },
-      update: async (externalId, payload) => {
-        calls.extensions.push({ method: "update", args: [externalId, payload] });
+      update: async (externalId: string, payload: Record<string, unknown>) => {
+        calls.extensions.push({
+          method: "update",
+          args: [externalId, payload],
+        });
         return {
           id: externalId,
           name: "Mock extension",
@@ -545,7 +538,7 @@ export const createMockSteelClient = (
           updatedAt: new Date(now()).toISOString(),
         };
       },
-      delete: async (externalId) => {
+      delete: async (externalId: string) => {
         calls.extensions.push({ method: "delete", args: [externalId] });
         return { message: "deleted" };
       },
@@ -553,7 +546,7 @@ export const createMockSteelClient = (
         calls.extensions.push({ method: "deleteAll", args: [] });
         return { message: "deleted" };
       },
-      download: async (externalId) => {
+      download: async (externalId: string) => {
         calls.extensions.push({ method: "download", args: [externalId] });
         return "extension-binary";
       },
@@ -563,58 +556,67 @@ export const createMockSteelClient = (
         calls.files.push({ method: "list", args: [] });
         return { data: [] };
       },
-      upload: async (payload) => {
+      upload: async (payload: Record<string, unknown>) => {
         calls.files.push({ method: "upload", args: [payload] });
         return {
-          path: typeof payload.path === "string" ? payload.path : "uploaded-file",
+          path:
+            typeof payload.path === "string" ? payload.path : "uploaded-file",
           size: 0,
           lastModified: new Date(now()).toISOString(),
         };
       },
-      delete: async (path) => {
+      delete: async (path: string) => {
         calls.files.push({ method: "delete", args: [path] });
         return { ok: true };
       },
-      download: async (path) => {
+      download: async (path: string) => {
         calls.files.push({ method: "download", args: [path] });
         return new Response("mock-file");
       },
     },
-    screenshot: async (args) => {
+    screenshot: async (args: Record<string, unknown>) => {
       calls.steel.push({ method: "screenshot", args: [args] });
       return { url: "https://example.com/screenshot.png" };
     },
-    scrape: async (args) => {
+    scrape: async (args: Record<string, unknown>) => {
       calls.steel.push({ method: "scrape", args: [args] });
-      return { content: { html: "<html></html>" }, links: [], metadata: { statusCode: 200 } };
+      return {
+        content: { html: "<html></html>" },
+        links: [],
+        metadata: { statusCode: 200 },
+      };
     },
-    pdf: async (args) => {
+    pdf: async (args: Record<string, unknown>) => {
       calls.steel.push({ method: "pdf", args: [args] });
       return { url: "https://example.com/page.pdf" };
     },
     steel: {
-      screenshot: async (args) => {
+      screenshot: async (args: Record<string, unknown>) => {
         calls.steel.push({ method: "steel.screenshot", args: [args] });
         return { url: "https://example.com/screenshot.png" };
       },
-      scrape: async (args) => {
+      scrape: async (args: Record<string, unknown>) => {
         calls.steel.push({ method: "steel.scrape", args: [args] });
-        return { content: { html: "<html></html>" }, links: [], metadata: { statusCode: 200 } };
+        return {
+          content: { html: "<html></html>" },
+          links: [],
+          metadata: { statusCode: 200 },
+        };
       },
-      pdf: async (args) => {
+      pdf: async (args: Record<string, unknown>) => {
         calls.steel.push({ method: "steel.pdf", args: [args] });
         return { url: "https://example.com/page.pdf" };
       },
     },
     __calls: calls,
-  };
+  } as unknown as Steel & { __calls: MockSteelClientCalls };
 };
 
-let currentMockClient: MockSteelClient | null = null;
+let currentMockClient: (Steel & { __calls: MockSteelClientCalls }) | null = null;
 
 export const registerMockSteelClient = (
   options: MockSteelClientOptions = {},
-): MockSteelClient => {
+): Steel & { __calls: MockSteelClientCalls } => {
   const client = createMockSteelClient(options);
   currentMockClient = client;
   __setTestSteelClientFactory(() => client);
@@ -639,7 +641,8 @@ export const componentModules = {
   "./topLevel.ts": () => import("./component/topLevel.js"),
   "./_generated/api.ts": () => import("./component/_generated/api.js"),
   "./_generated/server.ts": () => import("./component/_generated/server.js"),
-  "./_generated/dataModel.ts": () => import("./component/_generated/dataModel.js"),
+  "./_generated/dataModel.ts": () =>
+    import("./component/_generated/dataModel.js"),
 };
 
 export const register = (

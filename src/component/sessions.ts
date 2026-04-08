@@ -1,21 +1,31 @@
-import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  query,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
+import type Steel from "steel-sdk";
+import type {
+  Session,
+  SessionCreateParams,
+  SessionComputerParams,
+} from "steel-sdk/resources/sessions/sessions";
 import { createSteelClient } from "./steel";
 import {
   StructuredError,
   normalizeError,
   normalizeIncludeRaw,
-  normalizeOwnerId,
-  normalizeSessionStatus,
+  requireOwnerId,
+  runWithNormalizedError,
+  toTimestamp,
 } from "./normalize";
 import type { SessionStatus } from "./schema";
 
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 100;
-
-type JsonObject = Record<string, unknown>;
 
 interface UpsertSessionArgs {
   externalId: string;
@@ -40,14 +50,8 @@ interface UpsertSessionArgs {
   ownerId: string;
 }
 
-interface RefreshManyFailure {
+interface FailureResult {
   externalId?: string;
-  message: string;
-  operation: string;
-}
-
-interface ReleaseAllFailure {
-  externalId: string;
   message: string;
   operation: string;
 }
@@ -77,183 +81,39 @@ interface RawSessionRecord {
   ownerId?: string;
 }
 
-type SteelSessionsClient = {
-  sessions?: {
-    create?: (args: Record<string, unknown>) => Promise<unknown>;
-    retrieve?: (id: string) => Promise<unknown>;
-    list?: (query?: Record<string, unknown>) => Promise<unknown>;
-    release?: (id: string, body?: Record<string, unknown> | null) => Promise<unknown>;
-    releaseAll?: (body?: Record<string, unknown> | null) => Promise<unknown>;
-    computer?: (id: string, body: Record<string, unknown>) => Promise<unknown>;
-    context?: (id: string) => Promise<unknown>;
-    events?: (id: string) => Promise<unknown>;
-    liveDetails?: (id: string) => Promise<unknown>;
-    // Compatibility for older mocks.
-    get?: (id: string) => Promise<unknown>;
-  };
-};
-
-const pickFirstString = (value: JsonObject, keys: string[]): string | undefined => {
-  for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "string") {
-      const normalized = candidate.trim();
-      if (normalized.length > 0) {
-        return normalized;
-      }
-    }
-  }
-
-  return undefined;
-};
-
-const pickFirstNumber = (value: JsonObject, keys: string[]): number | undefined => {
-  for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-};
-
-const toTimestamp = (value: unknown): number | undefined => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed.length) {
-      return undefined;
-    }
-
-    const numeric = Number(trimmed);
-    if (Number.isFinite(numeric)) {
-      return numeric;
-    }
-
-    const parsed = Date.parse(trimmed);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
-};
-
-const pickFirstTimestamp = (value: JsonObject, keys: string[]): number | undefined => {
-  for (const key of keys) {
-    const candidate = toTimestamp(value[key]);
-    if (candidate !== undefined) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-};
-
-const pickFirstBoolean = (value: JsonObject, keys: string[]): boolean | undefined => {
-  for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "boolean") {
-      return candidate;
-    }
-  }
-
-  return undefined;
-};
-
-const requireOwnerId = (ownerId: string | undefined, operation: string): string => {
-  const normalized = normalizeOwnerId(ownerId);
-  if (!normalized) {
-    throw normalizeError(
-      `Missing ownerId: ownerId is required for ${operation}`,
-      operation,
-    );
-  }
-
-  return normalized;
-};
-
-const normalizeWithError = <T>(operation: string, handler: () => T): T => {
-  try {
-    return handler();
-  } catch (error) {
-    throw normalizeError(error, operation);
-  }
-};
-
-const runWithNormalizedError = async <T>(
-  operation: string,
-  handler: () => Promise<T>,
-): Promise<T> => {
-  try {
-    return await handler();
-  } catch (error) {
-    throw normalizeError(error, operation);
-  }
-};
-
-const normalizeCreatePayload = (
-  payload: JsonObject,
+const toSessionRecord = (
+  session: Session,
   ownerId: string,
-  includeRaw: boolean,
   syncedAt: number,
-): UpsertSessionArgs => {
-  const externalId =
-    pickFirstString(payload, ["externalId", "sessionExternalId", "sessionId", "id"]) ??
-    undefined;
-  if (!externalId) {
-    throw normalizeError("Create response missing externalId", "sessions.create");
-  }
+  includeRaw: boolean,
+): UpsertSessionArgs => ({
+  externalId: session.id,
+  status: session.status,
+  createdAt: toTimestamp(session.createdAt) ?? syncedAt,
+  updatedAt: syncedAt,
+  lastSyncedAt: syncedAt,
+  debugUrl: session.debugUrl,
+  sessionViewerUrl: session.sessionViewerUrl,
+  websocketUrl: session.websocketUrl,
+  timeout: session.timeout,
+  duration: session.duration,
+  creditsUsed: session.creditsUsed,
+  eventCount: session.eventCount,
+  proxyBytesUsed: session.proxyBytesUsed,
+  profileId: session.profileId,
+  region: session.region as string | undefined,
+  headless: session.headless,
+  isSelenium: session.isSelenium,
+  userAgent: session.userAgent,
+  ownerId,
+  ...(includeRaw ? { raw: session as unknown } : {}),
+});
 
-  const status = normalizeSessionStatus(
-    pickFirstString(payload, ["status"]) ?? "live",
-  );
-
-  return {
-    externalId,
-    status,
-    createdAt:
-      pickFirstTimestamp(payload, ["createdAt", "created_at"]) ??
-      pickFirstTimestamp(payload, ["created"]) ??
-      syncedAt,
-    updatedAt:
-      pickFirstTimestamp(payload, ["updatedAt", "updated_at"]) ??
-      pickFirstTimestamp(payload, ["updated"]) ??
-      syncedAt,
-    lastSyncedAt: syncedAt,
-    debugUrl: pickFirstString(payload, ["debugUrl", "debug_url"]),
-    sessionViewerUrl: pickFirstString(payload, [
-      "sessionViewerUrl",
-      "session_viewer_url",
-      "viewerUrl",
-      "viewer_url",
-    ]),
-    websocketUrl: pickFirstString(payload, ["websocketUrl", "websocket_url"]),
-    timeout: pickFirstNumber(payload, ["timeout"]),
-    duration: pickFirstNumber(payload, ["duration"]),
-    creditsUsed: pickFirstNumber(payload, ["creditsUsed", "credits_used"]),
-    eventCount: pickFirstNumber(payload, ["eventCount", "event_count"]),
-    proxyBytesUsed: pickFirstNumber(payload, ["proxyBytesUsed", "proxy_bytes_used"]),
-    profileId: pickFirstString(payload, ["profileId", "profile_id"]),
-    region: pickFirstString(payload, ["region"]),
-    headless: pickFirstBoolean(payload, ["headless"]),
-    isSelenium: pickFirstBoolean(payload, ["isSelenium", "is_selenium"]),
-    userAgent: pickFirstString(payload, ["userAgent", "user_agent"]),
-    ownerId,
-    ...(includeRaw ? { raw: payload } : {}),
-  };
-};
-
-const normalizeSessionRecord = (session: RawSessionRecord): UpsertSessionArgs => {
-  const ownerId = normalizeOwnerId(session.ownerId);
+const dbRecordToUpsertArgs = (session: RawSessionRecord): UpsertSessionArgs => {
+  const ownerId = session.ownerId?.trim();
   if (!ownerId) {
     throw normalizeError("Session record missing ownerId", "sessions.record");
   }
-
   return {
     externalId: session.externalId,
     status: session.status,
@@ -279,48 +139,65 @@ const normalizeSessionRecord = (session: RawSessionRecord): UpsertSessionArgs =>
 };
 
 const hasReleaseAlreadyDoneError = (error: unknown): boolean => {
-  if (!(error instanceof StructuredError)) {
-    return false;
-  }
-
-  if (error.code === "SESSION_ALREADY_RELEASED" || error.code === "SESSION_ALREADY_RELEASING") {
+  if (!(error instanceof StructuredError)) return false;
+  if (
+    error.code === "SESSION_ALREADY_RELEASED" ||
+    error.code === "SESSION_ALREADY_RELEASING"
+  )
     return true;
-  }
-
-  if (error.status === 409) {
-    return true;
-  }
-
-  const message = error.message.toLowerCase();
-  return ["already released", "already released", "already in released", "already not live"].some(
-    (marker) => message.includes(marker),
+  if (error.status === 409) return true;
+  const msg = error.message.toLowerCase();
+  return ["already released", "already in released", "already not live"].some(
+    (m) => msg.includes(m),
   );
 };
 
-const getSessionSyncTime = (): number => Date.now();
+const normalizeListLimit = (limit: number | undefined): number => {
+  const n =
+    typeof limit === "number" && Number.isFinite(limit)
+      ? Math.floor(limit)
+      : DEFAULT_LIST_LIMIT;
+  return Math.max(1, Math.min(n, MAX_LIST_LIMIT));
+};
+
+const buildReleasedPayload = (
+  session: RawSessionRecord,
+  syncedAt: number,
+): UpsertSessionArgs => ({
+  ...dbRecordToUpsertArgs(session),
+  status: "released",
+  updatedAt: syncedAt,
+  lastSyncedAt: syncedAt,
+});
+
+const assertSessionOwnerIfPresent = async (
+  ctx: { runQuery: (...args: any[]) => Promise<any> },
+  ownerId: string,
+  externalId: string,
+  operation: string,
+): Promise<void> => {
+  await runWithNormalizedError(operation, () =>
+    ctx.runQuery(internal.sessions.getInternalByExternalId, {
+      externalId,
+      ownerId,
+    }),
+  );
+};
 
 const getInternalByExternalId = internalQuery({
-  args: {
-    externalId: v.string(),
-    ownerId: v.string(),
-  },
+  args: { externalId: v.string(), ownerId: v.string() },
   handler: async (ctx, args) => {
     const session = await ctx.db
       .query("sessions")
       .withIndex("byExternalId", (q) => q.eq("externalId", args.externalId))
       .unique();
-
-    if (!session) {
-      return null;
-    }
-
+    if (!session) return null;
     if (session.ownerId !== args.ownerId) {
       throw normalizeError(
         "ownerId mismatch for session lookup",
         "sessions.getInternalByExternalId",
       );
     }
-
     return session;
   },
 });
@@ -328,20 +205,20 @@ const getInternalByExternalId = internalQuery({
 const listInternalByOwner = internalQuery({
   args: {
     ownerId: v.string(),
-    status: v.optional(v.union(v.literal("live"), v.literal("released"), v.literal("failed"))),
+    status: v.optional(
+      v.union(v.literal("live"), v.literal("released"), v.literal("failed")),
+    ),
     cursor: v.optional(v.string()),
     limit: v.number(),
   },
   handler: async (ctx, args) => {
-    let sessionQuery = ctx.db
+    let q = ctx.db
       .query("sessions")
       .withIndex("byOwnerId", (q) => q.eq("ownerId", args.ownerId));
-
     if (args.status) {
-      sessionQuery = sessionQuery.filter((q) => q.eq(q.field("status"), args.status));
+      q = q.filter((q) => q.eq(q.field("status"), args.status));
     }
-
-    const items = await sessionQuery.take(args.limit);
+    const items = await q.take(args.limit);
     return {
       items: items as RawSessionRecord[],
       hasMore: items.length === args.limit,
@@ -350,234 +227,14 @@ const listInternalByOwner = internalQuery({
   },
 });
 
-const buildReleasedSessionPayload = (
-  session: RawSessionRecord,
-  syncedAt: number,
-): UpsertSessionArgs => {
-  const normalized = normalizeSessionRecord(session);
-  return {
-    ...normalized,
-    status: "released",
-    updatedAt: syncedAt,
-    lastSyncedAt: syncedAt,
-  };
-};
-
-const remoteRelease = async (
-  steel: ReturnType<typeof createSteelClient>,
-  externalId: string,
-) => {
-  const sessionClient = steel as SteelSessionsClient;
-  const releaseMethod = sessionClient.sessions?.release;
-  if (!releaseMethod) {
-    throw normalizeError("Steel sessions.release is not available", "sessions.release");
-  }
-
-  return runWithNormalizedError("sessions.release", () =>
-    releaseMethod.call(sessionClient.sessions, externalId),
-  );
-};
-
-const remoteGetSession = async (steel: ReturnType<typeof createSteelClient>, externalId: string) => {
-  const sessionClient = steel as SteelSessionsClient;
-  const retrieveMethod = sessionClient.sessions?.retrieve;
-  const getMethod = sessionClient.sessions?.get;
-  if (!retrieveMethod && !getMethod) {
-    throw normalizeError("Steel sessions.retrieve is not available", "sessions.get");
-  }
-
-  const method = retrieveMethod ?? getMethod!;
-  return runWithNormalizedError("sessions.get", () =>
-    method.call(sessionClient.sessions, externalId),
-  );
-};
-
-const remoteCreateSession = async (
-  steel: ReturnType<typeof createSteelClient>,
-  payload: Record<string, unknown>,
-) => {
-  const sessionClient = steel as SteelSessionsClient;
-  const createMethod = sessionClient.sessions?.create;
-  if (!createMethod) {
-    throw normalizeError("Steel sessions.create is not available", "sessions.create");
-  }
-
-  return runWithNormalizedError("sessions.create", () =>
-    createMethod.call(sessionClient.sessions, payload),
-  );
-};
-
-const remoteListSessions = async (
-  steel: ReturnType<typeof createSteelClient>,
-  queryArgs: Record<string, unknown>,
-) => {
-  const sessionClient = steel as SteelSessionsClient;
-  const listMethod = sessionClient.sessions?.list;
-  if (!listMethod) {
-    throw normalizeError("Steel sessions.list is not available", "sessions.refreshMany");
-  }
-
-  return runWithNormalizedError("sessions.refreshMany", () =>
-    listMethod.call(sessionClient.sessions, queryArgs),
-  );
-};
-
-const remoteComputerSession = async (
-  steel: ReturnType<typeof createSteelClient>,
-  externalId: string,
-  commandArgs: Record<string, unknown>,
-) => {
-  const sessionClient = steel as SteelSessionsClient;
-  const computerMethod = sessionClient.sessions?.computer;
-  if (!computerMethod) {
-    throw normalizeError("Steel sessions.computer is not available", "sessions.computer");
-  }
-
-  return runWithNormalizedError("sessions.computer", () =>
-    computerMethod.call(sessionClient.sessions, externalId, commandArgs),
-  );
-};
-
-const remoteContextSession = async (
-  steel: ReturnType<typeof createSteelClient>,
-  externalId: string,
-) => {
-  const sessionClient = steel as SteelSessionsClient;
-  const contextMethod = sessionClient.sessions?.context;
-  if (!contextMethod) {
-    throw normalizeError("Steel sessions.context is not available", "sessions.context");
-  }
-
-  return runWithNormalizedError("sessions.context", () =>
-    contextMethod.call(sessionClient.sessions, externalId),
-  );
-};
-
-const remoteEventsSession = async (
-  steel: ReturnType<typeof createSteelClient>,
-  externalId: string,
-) => {
-  const sessionClient = steel as SteelSessionsClient;
-  const eventsMethod = sessionClient.sessions?.events;
-  if (!eventsMethod) {
-    throw normalizeError("Steel sessions.events is not available", "sessions.events");
-  }
-
-  return runWithNormalizedError("sessions.events", () =>
-    eventsMethod.call(sessionClient.sessions, externalId),
-  );
-};
-
-const remoteLiveDetailsSession = async (
-  steel: ReturnType<typeof createSteelClient>,
-  externalId: string,
-) => {
-  const sessionClient = steel as SteelSessionsClient;
-  const liveDetailsMethod = sessionClient.sessions?.liveDetails;
-  if (!liveDetailsMethod) {
-    throw normalizeError("Steel sessions.liveDetails is not available", "sessions.liveDetails");
-  }
-
-  return runWithNormalizedError("sessions.liveDetails", () =>
-    liveDetailsMethod.call(sessionClient.sessions, externalId),
-  );
-};
-
-const normalizeListLimit = (limit: number | undefined): number => {
-  const parsedLimit =
-    typeof limit === "number" && Number.isFinite(limit) ? Math.floor(limit) : DEFAULT_LIST_LIMIT;
-  return Math.max(1, Math.min(parsedLimit, MAX_LIST_LIMIT));
-};
-
-const normalizeCommandArgs = (
-  commandArgs: Record<string, unknown> | undefined,
-  operation: string,
-): Record<string, unknown> => {
-  if (!commandArgs) {
-    throw normalizeError(`commandArgs is required for ${operation}`, operation);
-  }
-
-  if (typeof commandArgs !== "object" || Array.isArray(commandArgs)) {
-    throw normalizeError(`Invalid commandArgs for ${operation}`, operation);
-  }
-
-  return { ...commandArgs };
-};
-
-const normalizeListResponse = (
-  operation: string,
-  response: unknown,
-): { items: JsonObject[]; hasMore: boolean; continuation?: string } => {
-  if (!response) {
-    throw normalizeError(`Invalid response from Steel sessions.list`, operation);
-  }
-
-  const envelope = response as JsonObject;
-  if (Array.isArray(response)) {
-    return {
-      items: response,
-      hasMore: false,
-    };
-  }
-
-  let items: unknown;
-  if (Array.isArray(envelope.items)) {
-    items = envelope.items;
-  } else if (Array.isArray(envelope.sessions)) {
-    items = envelope.sessions;
-  } else if (Array.isArray(envelope.results)) {
-    items = envelope.results;
-  } else if (Array.isArray(envelope.data)) {
-    items = envelope.data;
-  } else {
-    throw normalizeError(`Invalid response from Steel sessions.list`, operation);
-  }
-
-  const continuation = pickFirstString(envelope, [
-    "continueCursor",
-    "nextCursor",
-    "next_cursor",
-    "cursor",
-    "pageCursor",
-  ]);
-
-  let hasMore: boolean;
-  if (typeof envelope.hasMore === "boolean") {
-    hasMore = envelope.hasMore;
-  } else if (typeof envelope.isDone === "boolean") {
-    hasMore = !envelope.isDone;
-  } else {
-    hasMore = continuation !== undefined;
-  }
-
-  return {
-    items: items as JsonObject[],
-    hasMore,
-    continuation,
-  };
-};
-
-const assertSessionOwnerIfPresent = async (
-  ctx: unknown,
-  ownerId: string,
-  externalId: string,
-  operation: string,
-): Promise<void> => {
-  await runWithNormalizedError(operation, async () => {
-    await (ctx as { runQuery: (queryRef: unknown, args: unknown) => Promise<unknown> }).runQuery(
-      internal.sessions.getInternalByExternalId,
-      {
-      externalId,
-      ownerId,
-      },
-    );
-  });
-};
-
 const upsertSession = internalMutation({
   args: {
     externalId: v.string(),
-    status: v.union(v.literal("live"), v.literal("released"), v.literal("failed")),
+    status: v.union(
+      v.literal("live"),
+      v.literal("released"),
+      v.literal("failed"),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSyncedAt: v.number(),
@@ -614,10 +271,17 @@ const upsertSession = internalMutation({
       await ctx.db.patch(current._id, args);
       return current._id;
     }
-
     return ctx.db.insert("sessions", args);
   },
 });
+
+const persistSession = (
+  ctx: { runMutation: (...args: any[]) => Promise<any> },
+  record: UpsertSessionArgs,
+) =>
+  runWithNormalizedError("sessions.upsert", () =>
+    ctx.runMutation(internal.sessions.upsert, record),
+  );
 
 export const sessions = {
   create: action({
@@ -629,34 +293,24 @@ export const sessions = {
     },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.create");
-      const syncedAt = getSessionSyncTime();
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.create" },
+      const now = Date.now();
+      const steel = createSteelClient(args.apiKey, {
+        operation: "sessions.create",
+      });
+      const session = await runWithNormalizedError("sessions.create", () =>
+        steel.sessions.create(args.sessionArgs as SessionCreateParams),
       );
-      const sessionInput = args.sessionArgs ?? {};
-
-      const rawSession = await remoteCreateSession(steel, sessionInput as Record<string, unknown>);
-      if (!rawSession || typeof rawSession !== "object") {
-        throw normalizeError("Invalid response from Steel sessions.create", "sessions.create");
-      }
-
-      const normalizedSession = normalizeWithError("sessions.create", () =>
-        normalizeCreatePayload(
-          rawSession as JsonObject,
-          ownerId,
-          normalizeIncludeRaw(args.includeRaw),
-          syncedAt,
-        ),
+      const record = toSessionRecord(
+        session,
+        ownerId,
+        now,
+        normalizeIncludeRaw(args.includeRaw),
       );
-      await runWithNormalizedError("sessions.upsert", () =>
-        ctx.runMutation(internal.sessions.upsert, normalizedSession),
-      );
-
-      return normalizedSession;
+      await persistSession(ctx, record);
+      return record;
     },
   }),
+
   refresh: action({
     args: {
       apiKey: v.string(),
@@ -666,66 +320,50 @@ export const sessions = {
     },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.refresh");
-      const syncedAt = getSessionSyncTime();
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.refresh" },
+      const now = Date.now();
+      const steel = createSteelClient(args.apiKey, {
+        operation: "sessions.refresh",
+      });
+      const session = await runWithNormalizedError("sessions.refresh", () =>
+        steel.sessions.retrieve(args.externalId),
       );
-      const rawSession = await remoteGetSession(steel, args.externalId);
-      if (!rawSession || typeof rawSession !== "object") {
-        throw normalizeError("Invalid response from Steel sessions.get", "sessions.refresh");
-      }
-
-      const normalizedSession = normalizeWithError("sessions.refresh", () =>
-        normalizeCreatePayload(
-          rawSession as JsonObject,
-          ownerId,
-          normalizeIncludeRaw(args.includeRaw),
-          syncedAt,
-        ),
+      const record = toSessionRecord(
+        session,
+        ownerId,
+        now,
+        normalizeIncludeRaw(args.includeRaw),
       );
-      await runWithNormalizedError("sessions.upsert", () =>
-        ctx.runMutation(internal.sessions.upsert, normalizedSession),
-      );
-
-      return normalizedSession;
+      await persistSession(ctx, record);
+      return record;
     },
   }),
-  get: query({
-    args: {
-      id: v.string(),
-      ownerId: v.string(),
-    },
-    handler: async (ctx, args) => {
-      const session = (await ctx.db.get(args.id as any)) as RawSessionRecord | null;
-      if (!session) {
-        return null;
-      }
 
+  get: query({
+    args: { id: v.string(), ownerId: v.string() },
+    handler: async (ctx, args) => {
+      const session = (await ctx.db.get(
+        args.id as any,
+      )) as RawSessionRecord | null;
+      if (!session) return null;
       const ownerId = requireOwnerId(args.ownerId, "sessions.get");
       if (session.ownerId !== ownerId) {
-        throw normalizeError("ownerId mismatch for session query", "sessions.get");
+        throw normalizeError(
+          "ownerId mismatch for session query",
+          "sessions.get",
+        );
       }
-
-      return normalizeWithError("sessions.get", () => normalizeSessionRecord(session));
+      return dbRecordToUpsertArgs(session);
     },
   }),
+
   getByExternalId: query({
-    args: {
-      externalId: v.string(),
-      ownerId: v.string(),
-    },
+    args: { externalId: v.string(), ownerId: v.string() },
     handler: async (ctx, args) => {
       const session = await ctx.db
         .query("sessions")
         .withIndex("byExternalId", (q) => q.eq("externalId", args.externalId))
         .unique();
-
-      if (!session) {
-        return null;
-      }
-
+      if (!session) return null;
       const ownerId = requireOwnerId(args.ownerId, "sessions.getByExternalId");
       if (session.ownerId !== ownerId) {
         throw normalizeError(
@@ -733,96 +371,80 @@ export const sessions = {
           "sessions.getByExternalId",
         );
       }
-
-      return normalizeWithError("sessions.getByExternalId", () =>
-        normalizeSessionRecord(session),
-      );
+      return dbRecordToUpsertArgs(session);
     },
   }),
+
   refreshMany: action({
     args: {
       apiKey: v.string(),
       ownerId: v.string(),
-      status: v.optional(v.union(v.literal("live"), v.literal("released"), v.literal("failed"))),
+      status: v.optional(
+        v.union(v.literal("live"), v.literal("released"), v.literal("failed")),
+      ),
       cursor: v.optional(v.string()),
       limit: v.optional(v.number()),
       includeRaw: v.optional(v.boolean()),
     },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.refreshMany");
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.refreshMany" },
-      );
-      const limit = normalizeListLimit(args.limit);
+      const steel = createSteelClient(args.apiKey, {
+        operation: "sessions.refreshMany",
+      });
       const includeRaw = normalizeIncludeRaw(args.includeRaw);
+      const limit = normalizeListLimit(args.limit);
 
-      const listArgs = {
-        ...(args.status ? { status: args.status } : {}),
-        ...(args.cursor ? { cursor: args.cursor } : {}),
-        limit,
-      };
-      const listResponse = await remoteListSessions(steel, listArgs);
-      if (typeof listResponse !== "object") {
-        throw normalizeError("Invalid response from Steel sessions.list", "sessions.refreshMany");
-      }
-
-      const { items, hasMore, continuation } = normalizeListResponse(
-        "sessions.refreshMany",
-        listResponse,
+      const page = await runWithNormalizedError("sessions.refreshMany", () =>
+        steel.sessions.list({
+          ...(args.status ? { status: args.status } : {}),
+          ...(args.cursor ? { cursorId: args.cursor } : {}),
+          limit,
+        }),
       );
 
       const results: UpsertSessionArgs[] = [];
-      const failures: RefreshManyFailure[] = [];
+      const failures: FailureResult[] = [];
 
-      for (const raw of items) {
-        const externalId = pickFirstString(raw, [
-          "externalId",
-          "sessionExternalId",
-          "sessionId",
-          "id",
-        ]);
-        if (!externalId) {
-          failures.push({
-            operation: "sessions.refreshMany.item",
-            message: "Item missing externalId",
-          });
-          continue;
-        }
-
+      // Use list data directly instead of N+1 retrieve calls
+      for (const item of page.sessions) {
         try {
-          const syncedAt = getSessionSyncTime();
-          const remoteSession = await remoteGetSession(steel, externalId);
-          if (!remoteSession || typeof remoteSession !== "object") {
-            throw normalizeError("Invalid response from Steel sessions.get", "sessions.refreshMany.item");
-          }
-
-          const normalizedSession = normalizeWithError("sessions.refreshMany.item", () =>
-            normalizeCreatePayload(remoteSession as JsonObject, ownerId, includeRaw, syncedAt),
+          const now = Date.now();
+          const record = toSessionRecord(
+            item as unknown as Session,
+            ownerId,
+            now,
+            includeRaw,
           );
-          const normalizedWithTimestamp = {
-            ...normalizedSession,
-            lastSyncedAt: syncedAt,
-          };
-          await runWithNormalizedError("sessions.upsert", () =>
-            ctx.runMutation(internal.sessions.upsert, normalizedWithTimestamp),
-          );
-          results.push(normalizedWithTimestamp);
+          await persistSession(ctx, record);
+          results.push(record);
         } catch (error) {
-          const structured = error instanceof Error ? error.message : "Session refresh failed";
-          failures.push({ externalId, operation: "sessions.refreshMany.item", message: structured });
+          const msg =
+            error instanceof Error ? error.message : "Session refresh failed";
+          failures.push({
+            externalId: item.id,
+            operation: "sessions.refreshMany.item",
+            message: msg,
+          });
         }
       }
 
       return {
         items: results,
         failures,
-        hasMore,
-        continuation,
+        hasMore: page.hasNextPage(),
+        continuation:
+          (() => {
+            const info = page.nextPageInfo();
+            if (!info) return undefined;
+            if ("params" in info && info.params) {
+              return String(info.params.cursorId ?? "");
+            }
+            return undefined;
+          })() || undefined,
       };
     },
   }),
+
   computer: action({
     args: {
       apiKey: v.string(),
@@ -832,70 +454,86 @@ export const sessions = {
     },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.computer");
-      await assertSessionOwnerIfPresent(ctx, ownerId, args.externalId, "sessions.computer");
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.computer" },
+      await assertSessionOwnerIfPresent(
+        ctx,
+        ownerId,
+        args.externalId,
+        "sessions.computer",
       );
-      const commandArgs = normalizeCommandArgs(args.commandArgs, "sessions.computer");
-      return remoteComputerSession(steel, args.externalId, commandArgs);
+      const steel = createSteelClient(args.apiKey, {
+        operation: "sessions.computer",
+      });
+      return runWithNormalizedError("sessions.computer", () =>
+        steel.sessions.computer(
+          args.externalId,
+          args.commandArgs as SessionComputerParams,
+        ),
+      );
     },
   }),
+
   context: action({
-    args: {
-      apiKey: v.string(),
-      ownerId: v.string(),
-      externalId: v.string(),
-    },
+    args: { apiKey: v.string(), ownerId: v.string(), externalId: v.string() },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.context");
-      await assertSessionOwnerIfPresent(ctx, ownerId, args.externalId, "sessions.context");
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.context" },
+      await assertSessionOwnerIfPresent(
+        ctx,
+        ownerId,
+        args.externalId,
+        "sessions.context",
       );
-      return remoteContextSession(steel, args.externalId);
+      const steel = createSteelClient(args.apiKey, {
+        operation: "sessions.context",
+      });
+      return runWithNormalizedError("sessions.context", () =>
+        steel.sessions.context(args.externalId),
+      );
     },
   }),
+
   events: action({
-    args: {
-      apiKey: v.string(),
-      ownerId: v.string(),
-      externalId: v.string(),
-    },
+    args: { apiKey: v.string(), ownerId: v.string(), externalId: v.string() },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.events");
-      await assertSessionOwnerIfPresent(ctx, ownerId, args.externalId, "sessions.events");
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.events" },
+      await assertSessionOwnerIfPresent(
+        ctx,
+        ownerId,
+        args.externalId,
+        "sessions.events",
       );
-      return remoteEventsSession(steel, args.externalId);
+      const steel = createSteelClient(args.apiKey, {
+        operation: "sessions.events",
+      });
+      return runWithNormalizedError("sessions.events", () =>
+        steel.sessions.events(args.externalId),
+      );
     },
   }),
+
   liveDetails: action({
-    args: {
-      apiKey: v.string(),
-      ownerId: v.string(),
-      externalId: v.string(),
-    },
+    args: { apiKey: v.string(), ownerId: v.string(), externalId: v.string() },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.liveDetails");
-      await assertSessionOwnerIfPresent(ctx, ownerId, args.externalId, "sessions.liveDetails");
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.liveDetails" },
+      await assertSessionOwnerIfPresent(
+        ctx,
+        ownerId,
+        args.externalId,
+        "sessions.liveDetails",
       );
-      return remoteLiveDetailsSession(steel, args.externalId);
+      const steel = createSteelClient(args.apiKey, {
+        operation: "sessions.liveDetails",
+      });
+      return runWithNormalizedError("sessions.liveDetails", () =>
+        steel.sessions.liveDetails(args.externalId),
+      );
     },
   }),
+
   list: query({
     args: {
-      status: v.optional(v.union(v.literal("live"), v.literal("released"), v.literal("failed"))),
+      status: v.optional(
+        v.union(v.literal("live"), v.literal("released"), v.literal("failed")),
+      ),
       ownerId: v.string(),
       cursor: v.optional(v.string()),
       limit: v.optional(v.number()),
@@ -904,101 +542,84 @@ export const sessions = {
       const limit = normalizeListLimit(args.limit);
       const ownerId = requireOwnerId(args.ownerId, "sessions.list");
 
-      let sessionQuery = ctx.db
+      let q = ctx.db
         .query("sessions")
         .withIndex("byOwnerId", (q) => q.eq("ownerId", ownerId));
-
       if (args.status) {
-        sessionQuery = sessionQuery.filter((q) => q.eq(q.field("status"), args.status));
+        q = q.filter((q) => q.eq(q.field("status"), args.status));
       }
 
-      const items = await sessionQuery.take(limit);
+      const items = await q.take(limit);
       return {
-        items: items.map((session) =>
-          normalizeWithError("sessions.list", () => normalizeSessionRecord(session as RawSessionRecord)),
-        ),
+        items: items.map((s) => dbRecordToUpsertArgs(s as RawSessionRecord)),
         hasMore: items.length === limit,
         continuation: undefined,
       };
     },
   }),
+
   release: action({
-    args: {
-      apiKey: v.string(),
-      externalId: v.string(),
-      ownerId: v.string(),
-    },
+    args: { apiKey: v.string(), externalId: v.string(), ownerId: v.string() },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.release");
+      const now = Date.now();
 
-      const now = getSessionSyncTime();
-      const existing = (await runWithNormalizedError("sessions.getInternalByExternalId", () =>
-        ctx.runQuery(internal.sessions.getInternalByExternalId, {
-          externalId: args.externalId,
-          ownerId,
-        }),
+      const existing = (await runWithNormalizedError(
+        "sessions.getInternalByExternalId",
+        () =>
+          ctx.runQuery(internal.sessions.getInternalByExternalId, {
+            externalId: args.externalId,
+            ownerId,
+          }),
       )) as RawSessionRecord | null;
 
       if (existing?.status === "released") {
-        const released = buildReleasedSessionPayload(existing, now);
-        await runWithNormalizedError("sessions.upsert", () =>
-          ctx.runMutation(internal.sessions.upsert, released),
-        );
+        const released = buildReleasedPayload(existing, now);
+        await persistSession(ctx, released);
         return released;
       }
 
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.release" },
-      );
+      const steel = createSteelClient(args.apiKey, {
+        operation: "sessions.release",
+      });
 
       try {
-        await remoteRelease(steel, args.externalId);
+        await runWithNormalizedError("sessions.release", () =>
+          steel.sessions.release(args.externalId),
+        );
       } catch (error) {
-        const normalizedError = error instanceof StructuredError
-          ? error
-          : normalizeError(error, "sessions.release");
-        if (!hasReleaseAlreadyDoneError(normalizedError)) {
-          throw normalizedError;
-        }
+        if (!hasReleaseAlreadyDoneError(error)) throw error;
       }
 
-      const remoteSession = await remoteGetSession(steel, args.externalId);
-      if (remoteSession && typeof remoteSession === "object") {
-        const normalizedSession = normalizeWithError("sessions.release", () =>
-          normalizeCreatePayload(
-            remoteSession as JsonObject,
-            ownerId,
-            false,
-            now,
-          ),
+      // Re-fetch to get final state
+      try {
+        const session = await runWithNormalizedError(
+          "sessions.release.sync",
+          () => steel.sessions.retrieve(args.externalId),
         );
-        const released = {
-          ...normalizedSession,
-          status: "released" as const,
+        const record: UpsertSessionArgs = {
+          ...toSessionRecord(session, ownerId, now, false),
+          status: "released",
           updatedAt: now,
           lastSyncedAt: now,
         };
-        await runWithNormalizedError("sessions.upsert", () =>
-          ctx.runMutation(internal.sessions.upsert, released),
-        );
+        await persistSession(ctx, record);
+        return record;
+      } catch {
+        // If retrieve fails, fall back to local record
+        if (!existing) {
+          throw normalizeError(
+            "Invalid response from Steel sessions.get during release sync",
+            "sessions.release",
+          );
+        }
+        const released = buildReleasedPayload(existing, now);
+        await persistSession(ctx, released);
         return released;
       }
-
-      if (!existing) {
-        throw normalizeError(
-          "Invalid response from Steel sessions.get during release sync",
-          "sessions.release",
-        );
-      }
-
-      const released = buildReleasedSessionPayload(existing, now);
-      await runWithNormalizedError("sessions.upsert", () =>
-        ctx.runMutation(internal.sessions.upsert, released),
-      );
-      return released;
     },
   }),
+
   releaseAll: action({
     args: {
       apiKey: v.string(),
@@ -1011,86 +632,74 @@ export const sessions = {
     },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessions.releaseAll");
-
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessions.releaseAll" },
-      );
+      const steel = createSteelClient(args.apiKey, {
+        operation: "sessions.releaseAll",
+      });
       const limit = normalizeListLimit(args.limit);
 
-      const page = (await runWithNormalizedError("sessions.listInternalByOwner", () =>
-        ctx.runQuery(internal.sessions.listInternalByOwner, {
-          ownerId,
-          status: args.status,
-          cursor: args.cursor,
-          limit,
-        }),
+      const page = (await runWithNormalizedError(
+        "sessions.listInternalByOwner",
+        () =>
+          ctx.runQuery(internal.sessions.listInternalByOwner, {
+            ownerId,
+            status: args.status,
+            cursor: args.cursor,
+            limit,
+          }),
       )) as {
         items: RawSessionRecord[];
         hasMore: boolean;
         continuation?: string;
       };
+
       const results: UpsertSessionArgs[] = [];
-      const failures: ReleaseAllFailure[] = [];
+      const failures: FailureResult[] = [];
 
       for (const session of page.items) {
         const releaseNow = Date.now();
+
         if (session.status === "released") {
-          const released = buildReleasedSessionPayload(session, releaseNow);
-          await runWithNormalizedError("sessions.upsert", () =>
-            ctx.runMutation(internal.sessions.upsert, released),
-          );
+          const released = buildReleasedPayload(session, releaseNow);
+          await persistSession(ctx, released);
           results.push(released);
           continue;
         }
 
         try {
-          await remoteRelease(steel, session.externalId);
-          const remoteSession = await remoteGetSession(steel, session.externalId);
-          if (remoteSession && typeof remoteSession === "object") {
-            const normalizedSession = normalizeWithError("sessions.releaseAll.item", () =>
-              normalizeCreatePayload(
-                remoteSession as JsonObject,
-                ownerId,
-                false,
-                releaseNow,
-              ),
+          await runWithNormalizedError("sessions.releaseAll.item", () =>
+            steel.sessions.release(session.externalId),
+          );
+
+          try {
+            const remote = await runWithNormalizedError(
+              "sessions.releaseAll.sync",
+              () => steel.sessions.retrieve(session.externalId),
             );
-            const released = {
-              ...normalizedSession,
-              status: "released" as const,
+            const record: UpsertSessionArgs = {
+              ...toSessionRecord(remote, ownerId, releaseNow, false),
+              status: "released",
               updatedAt: releaseNow,
               lastSyncedAt: releaseNow,
             };
-            await runWithNormalizedError("sessions.upsert", () =>
-              ctx.runMutation(internal.sessions.upsert, released),
-            );
-            results.push(released);
-            continue;
+            await persistSession(ctx, record);
+            results.push(record);
+          } catch {
+            const fallback = buildReleasedPayload(session, releaseNow);
+            await persistSession(ctx, fallback);
+            results.push(fallback);
           }
-
-          const fallback = buildReleasedSessionPayload(session, releaseNow);
-          await runWithNormalizedError("sessions.upsert", () =>
-            ctx.runMutation(internal.sessions.upsert, fallback),
-          );
-          results.push(fallback);
         } catch (error) {
-          const normalizedError = error instanceof StructuredError
-            ? error
-            : normalizeError(error, "sessions.releaseAll.item");
-          if (hasReleaseAlreadyDoneError(normalizedError)) {
-            const released = buildReleasedSessionPayload(session, releaseNow);
-            await runWithNormalizedError("sessions.upsert", () =>
-              ctx.runMutation(internal.sessions.upsert, released),
-            );
+          if (hasReleaseAlreadyDoneError(error)) {
+            const released = buildReleasedPayload(session, releaseNow);
+            await persistSession(ctx, released);
             results.push(released);
             continue;
           }
-
+          const msg = error instanceof Error ? error.message : "Release failed";
           failures.push({
             externalId: session.externalId,
             operation: "sessions.releaseAll.item",
-            message: normalizedError.message,
+            message: msg,
           });
         }
       }
@@ -1103,8 +712,9 @@ export const sessions = {
       };
     },
   }),
-  getInternalByExternalId: getInternalByExternalId,
-  listInternalByOwner: listInternalByOwner,
+
+  getInternalByExternalId,
+  listInternalByOwner,
   upsert: upsertSession,
 };
 

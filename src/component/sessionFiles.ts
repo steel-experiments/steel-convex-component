@@ -2,183 +2,50 @@ import { action, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
+import type Steel from "steel-sdk";
+import type { Fileslist, File as SteelFile } from "steel-sdk/resources/files";
+
 import { createSteelClient } from "./steel";
-import { normalizeError, normalizeOwnerId } from "./normalize";
+import {
+  normalizeError,
+  requireOwnerId,
+  runWithNormalizedError,
+  toTimestamp,
+} from "./normalize";
 
-type JsonObject = Record<string, unknown>;
-
-type SteelSessionFilesClient = {
-  sessions?: {
-    files?: {
-      list?: (sessionId: string) => Promise<unknown>;
-      upload?: (sessionId: string, body: Record<string, unknown>) => Promise<unknown>;
-      delete?: (sessionId: string, path: string) => Promise<unknown>;
-      deleteAll?: (sessionId: string) => Promise<unknown>;
-    };
-  };
-};
-
-const requireOwnerId = (ownerId: string | undefined, operation: string): string => {
-  const normalized = normalizeOwnerId(ownerId);
-  if (!normalized) {
-    throw normalizeError(`Missing ownerId: ownerId is required for ${operation}`, operation);
-  }
-
-  return normalized;
-};
-
-const runWithNormalizedError = async <T>(
-  operation: string,
-  handler: () => Promise<T>,
-): Promise<T> => {
-  try {
-    return await handler();
-  } catch (error) {
-    throw normalizeError(error, operation);
-  }
-};
-
-const pickFirstString = (value: JsonObject, keys: string[]): string | undefined => {
-  for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "string") {
-      const normalized = candidate.trim();
-      if (normalized.length > 0) {
-        return normalized;
-      }
-    }
-  }
-
-  return undefined;
-};
-
-const toTimestamp = (value: unknown): number | undefined => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed.length) {
-      return undefined;
-    }
-
-    const numeric = Number(trimmed);
-    if (Number.isFinite(numeric)) {
-      return numeric;
-    }
-
-    const parsed = Date.parse(trimmed);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
-};
-
-const pickFirstNumber = (value: JsonObject, keys: string[]): number | undefined => {
-  for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-};
-
-const pickFirstTimestamp = (value: JsonObject, keys: string[]): number | undefined => {
-  for (const key of keys) {
-    const candidate = toTimestamp(value[key]);
-    if (candidate !== undefined) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-};
-
-const normalizeSessionFileMetadata = (
-  raw: JsonObject,
-  sessionExternalId: string,
-  ownerId: string,
-  syncedAt: number,
-): {
+interface SessionFileMetadata {
   sessionExternalId: string;
   path: string;
   size: number;
   lastModified: number;
   ownerId: string;
   lastSyncedAt: number;
-} => {
-  const path = pickFirstString(raw, ["path", "filePath", "file_path", "name", "filename"]);
-  if (!path) {
-    throw normalizeError("Session file metadata missing path", "sessionFiles.normalizeMetadata");
-  }
+}
 
-  const size = pickFirstNumber(raw, ["size", "byteCount", "bytes"]) ?? 0;
-  const lastModified =
-    pickFirstTimestamp(raw, ["lastModified", "last_modified", "modifiedAt", "modified_at"]) ??
-    syncedAt;
+const toSessionFileMetadata = (
+  file: Fileslist.Data | SteelFile,
+  sessionExternalId: string,
+  ownerId: string,
+  syncedAt: number,
+): SessionFileMetadata => {
+  if (!file.path) {
+    throw normalizeError(
+      "Session file metadata missing path",
+      "sessionFiles.normalizeMetadata",
+    );
+  }
 
   return {
     sessionExternalId,
-    path,
-    size,
-    lastModified,
+    path: file.path,
+    size: file.size ?? 0,
+    lastModified: toTimestamp(file.lastModified) ?? syncedAt,
     ownerId,
     lastSyncedAt: syncedAt,
   };
 };
 
-const normalizeListResponse = (
-  operation: string,
-  response: unknown,
-): { items: JsonObject[]; hasMore: boolean; continuation?: string } => {
-  if (!response) {
-    throw normalizeError(`Invalid response from Steel sessions.files.list`, operation);
-  }
-
-  if (Array.isArray(response)) {
-    return {
-      items: response,
-      hasMore: false,
-    };
-  }
-
-  const envelope = response as JsonObject;
-  let items: unknown;
-  if (Array.isArray(envelope.items)) {
-    items = envelope.items;
-  } else if (Array.isArray(envelope.files)) {
-    items = envelope.files;
-  } else if (Array.isArray(envelope.results)) {
-    items = envelope.results;
-  } else if (Array.isArray(envelope.data)) {
-    items = envelope.data;
-  } else {
-    throw normalizeError(`Invalid response from Steel sessions.files.list`, operation);
-  }
-
-  const continuation = pickFirstString(envelope, [
-    "continueCursor",
-    "nextCursor",
-    "next_cursor",
-    "cursor",
-    "pageCursor",
-  ]);
-
-  const hasMore = typeof envelope.hasMore === "boolean" ? envelope.hasMore : continuation !== undefined;
-
-  return {
-    items: items as JsonObject[],
-    hasMore,
-    continuation,
-  };
-};
-
-const normalizeUploadPayload = (
+const buildUploadPayload = (
   args: {
     file?: string;
     url?: string;
@@ -186,9 +53,15 @@ const normalizeUploadPayload = (
     fileArgs?: Record<string, unknown>;
   },
   operation: string,
-): Record<string, unknown> => {
-  const file = typeof args.file === "string" && args.file.trim().length > 0 ? args.file.trim() : undefined;
-  const url = typeof args.url === "string" && args.url.trim().length > 0 ? args.url.trim() : undefined;
+): { file: unknown; path?: string } => {
+  const file =
+    typeof args.file === "string" && args.file.trim().length > 0
+      ? args.file.trim()
+      : undefined;
+  const url =
+    typeof args.url === "string" && args.url.trim().length > 0
+      ? args.url.trim()
+      : undefined;
   const source = file ?? url;
 
   if (!source) {
@@ -215,9 +88,7 @@ const upsertSessionFileMetadata = internalMutation({
     const current = await ctx.db
       .query("sessionFileMetadata")
       .withIndex("bySessionExternalIdAndPath", (q) =>
-        q
-          .eq("sessionExternalId", args.sessionExternalId)
-          .eq("path", args.path),
+        q.eq("sessionExternalId", args.sessionExternalId).eq("path", args.path),
       )
       .unique();
 
@@ -254,9 +125,7 @@ const deleteSessionFileMetadata = internalMutation({
     const record = await ctx.db
       .query("sessionFileMetadata")
       .withIndex("bySessionExternalIdAndPath", (q) =>
-        q
-          .eq("sessionExternalId", args.sessionExternalId)
-          .eq("path", args.path),
+        q.eq("sessionExternalId", args.sessionExternalId).eq("path", args.path),
       )
       .unique();
 
@@ -265,7 +134,10 @@ const deleteSessionFileMetadata = internalMutation({
     }
 
     if (record.ownerId && record.ownerId !== args.ownerId) {
-      throw normalizeError("ownerId mismatch for session file delete", "sessionFiles.delete");
+      throw normalizeError(
+        "ownerId mismatch for session file delete",
+        "sessionFiles.delete",
+      );
     }
 
     await ctx.db.delete(record._id);
@@ -280,7 +152,9 @@ const deleteAllSessionFileMetadata = internalMutation({
   handler: async (ctx, args) => {
     const records = await ctx.db
       .query("sessionFileMetadata")
-      .withIndex("bySessionExternalId", (q) => q.eq("sessionExternalId", args.sessionExternalId))
+      .withIndex("bySessionExternalId", (q) =>
+        q.eq("sessionExternalId", args.sessionExternalId),
+      )
       .collect();
 
     for (const record of records) {
@@ -296,60 +170,6 @@ const deleteAllSessionFileMetadata = internalMutation({
   },
 });
 
-const runSessionFilesList = async (
-  steel: ReturnType<typeof createSteelClient>,
-  sessionExternalId: string,
-) => {
-  const client = steel as SteelSessionFilesClient;
-  const listMethod = client.sessions?.files?.list;
-  if (!listMethod) {
-    throw normalizeError("Steel sessions.files.list is not available", "sessionFiles.list");
-  }
-
-  return runWithNormalizedError("sessionFiles.list", () => listMethod(sessionExternalId));
-};
-
-const runSessionFilesUpload = async (
-  steel: ReturnType<typeof createSteelClient>,
-  sessionExternalId: string,
-  payload: Record<string, unknown>,
-) => {
-  const client = steel as SteelSessionFilesClient;
-  const uploadMethod = client.sessions?.files?.upload;
-  if (!uploadMethod) {
-    throw normalizeError("Steel sessions.files.upload is not available", "sessionFiles.upload");
-  }
-
-  return runWithNormalizedError("sessionFiles.upload", () => uploadMethod(sessionExternalId, payload));
-};
-
-const runSessionFilesDelete = async (
-  steel: ReturnType<typeof createSteelClient>,
-  sessionExternalId: string,
-  path: string,
-) => {
-  const client = steel as SteelSessionFilesClient;
-  const deleteMethod = client.sessions?.files?.delete;
-  if (!deleteMethod) {
-    throw normalizeError("Steel sessions.files.delete is not available", "sessionFiles.delete");
-  }
-
-  return runWithNormalizedError("sessionFiles.delete", () => deleteMethod(sessionExternalId, path));
-};
-
-const runSessionFilesDeleteAll = async (
-  steel: ReturnType<typeof createSteelClient>,
-  sessionExternalId: string,
-) => {
-  const client = steel as SteelSessionFilesClient;
-  const deleteAllMethod = client.sessions?.files?.deleteAll;
-  if (!deleteAllMethod) {
-    throw normalizeError("Steel sessions.files.deleteAll is not available", "sessionFiles.deleteAll");
-  }
-
-  return runWithNormalizedError("sessionFiles.deleteAll", () => deleteAllMethod(sessionExternalId));
-};
-
 const uploadAction = action({
   args: {
     apiKey: v.string(),
@@ -364,12 +184,11 @@ const uploadAction = action({
     const ownerId = requireOwnerId(args.ownerId, "sessionFiles.upload");
     const syncedAt = Date.now();
 
-    const steel = createSteelClient(
-      { apiKey: args.apiKey },
-      { operation: "sessionFiles.upload" },
-    );
+    const steel: Steel = createSteelClient(args.apiKey, {
+      operation: "sessionFiles.upload",
+    });
 
-    const payload = normalizeUploadPayload(
+    const payload = buildUploadPayload(
       {
         file: args.file,
         url: args.url,
@@ -379,24 +198,27 @@ const uploadAction = action({
       "sessionFiles.upload",
     );
 
-    const rawResult = await runSessionFilesUpload(steel, args.sessionExternalId, payload);
-
-    if (rawResult && typeof rawResult === "object") {
-      const metadata = normalizeSessionFileMetadata(
-        rawResult as JsonObject,
+    const result = await runWithNormalizedError("sessionFiles.upload", () =>
+      // Cast payload — the SDK types expect Uploadable for `file`, but the
+      // Convex action receives a plain string (URL / base64).
+      steel.sessions.files.upload(
         args.sessionExternalId,
-        ownerId,
-        syncedAt,
-      );
+        payload as Parameters<typeof steel.sessions.files.upload>[1],
+      ),
+    );
 
-      await runWithNormalizedError("sessionFiles.upsert", () =>
-        ctx.runMutation(internal.sessionFiles.upsert, metadata),
-      );
+    const metadata = toSessionFileMetadata(
+      result,
+      args.sessionExternalId,
+      ownerId,
+      syncedAt,
+    );
 
-      return metadata;
-    }
+    await runWithNormalizedError("sessionFiles.upsert", () =>
+      ctx.runMutation(internal.sessionFiles.upsert, metadata),
+    );
 
-    return rawResult;
+    return metadata;
   },
 });
 
@@ -411,17 +233,22 @@ export const sessionFiles = {
       const ownerId = requireOwnerId(args.ownerId, "sessionFiles.list");
       const syncedAt = Date.now();
 
-      const steel = createSteelClient({ apiKey: args.apiKey }, { operation: "sessionFiles.list" });
-      const raw = await runSessionFilesList(steel, args.sessionExternalId);
-      const normalizedList = normalizeListResponse("sessionFiles.list", raw);
+      const steel: Steel = createSteelClient(args.apiKey, {
+        operation: "sessionFiles.list",
+      });
 
-      const items = [] as ReturnType<typeof normalizeSessionFileMetadata>[];
-      for (const item of normalizedList.items) {
-        if (typeof item !== "object" || item === null) {
-          continue;
-        }
+      const response = await runWithNormalizedError("sessionFiles.list", () =>
+        steel.sessions.files.list(args.sessionExternalId),
+      );
 
-        const metadata = normalizeSessionFileMetadata(item, args.sessionExternalId, ownerId, syncedAt);
+      const items: SessionFileMetadata[] = [];
+      for (const entry of response.data) {
+        const metadata = toSessionFileMetadata(
+          entry,
+          args.sessionExternalId,
+          ownerId,
+          syncedAt,
+        );
         await runWithNormalizedError("sessionFiles.upsert", () =>
           ctx.runMutation(internal.sessionFiles.upsert, metadata),
         );
@@ -430,8 +257,8 @@ export const sessionFiles = {
 
       return {
         items,
-        hasMore: normalizedList.hasMore,
-        continuation: normalizedList.continuation,
+        hasMore: false,
+        continuation: undefined,
       };
     },
   }),
@@ -447,12 +274,13 @@ export const sessionFiles = {
     },
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessionFiles.delete");
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessionFiles.delete" },
-      );
+      const steel: Steel = createSteelClient(args.apiKey, {
+        operation: "sessionFiles.delete",
+      });
 
-      const result = await runSessionFilesDelete(steel, args.sessionExternalId, args.path);
+      await runWithNormalizedError("sessionFiles.delete", () =>
+        steel.sessions.files.delete(args.sessionExternalId, args.path),
+      );
 
       await runWithNormalizedError("sessionFiles.delete", () =>
         ctx.runMutation(internal.sessionFiles.deleteOne, {
@@ -461,8 +289,6 @@ export const sessionFiles = {
           ownerId,
         }),
       );
-
-      return result;
     },
   }),
   deleteAll: action({
@@ -474,12 +300,13 @@ export const sessionFiles = {
     handler: async (ctx, args) => {
       const ownerId = requireOwnerId(args.ownerId, "sessionFiles.deleteAll");
 
-      const steel = createSteelClient(
-        { apiKey: args.apiKey },
-        { operation: "sessionFiles.deleteAll" },
-      );
+      const steel: Steel = createSteelClient(args.apiKey, {
+        operation: "sessionFiles.deleteAll",
+      });
 
-      const result = await runSessionFilesDeleteAll(steel, args.sessionExternalId);
+      await runWithNormalizedError("sessionFiles.deleteAll", () =>
+        steel.sessions.files.deleteAll(args.sessionExternalId),
+      );
 
       await runWithNormalizedError("sessionFiles.deleteAll", () =>
         ctx.runMutation(internal.sessionFiles.deleteAllForSession, {
@@ -487,8 +314,6 @@ export const sessionFiles = {
           ownerId,
         }),
       );
-
-      return result;
     },
   }),
   upsert: upsertSessionFileMetadata,
