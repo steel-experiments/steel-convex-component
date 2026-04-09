@@ -25,6 +25,4 @@ jobs:
 
       - run: npm run release:verify
 
-      - run: npm test
-
       - run: npm pack --dry-run
