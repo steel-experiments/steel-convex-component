@@ -1,5 +1,5 @@
 {
-  "name": "steel-convex",
+  "name": "@steel-dev/convex",
   "version": "0.2.1",
   "description": "Convex component wrapper for Steel",
   "type": "module",
