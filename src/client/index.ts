@@ -72,7 +72,7 @@ interface SteelComponentFunctions {
     download: unknown;
     downloadToStorage: unknown;
   };
-  steel: {
+  topLevel: {
     screenshot: unknown;
     scrape: unknown;
     pdf: unknown;
@@ -956,7 +956,7 @@ export class SteelComponent {
     ) =>
       this.runAction<SteelComponentTopLevelArgs, unknown>(
         ctx,
-        this.component.steel.screenshot,
+        this.component.topLevel.screenshot,
         args,
         options,
       ),
@@ -967,7 +967,7 @@ export class SteelComponent {
     ) =>
       this.runAction<SteelComponentTopLevelArgs, unknown>(
         ctx,
-        this.component.steel.scrape,
+        this.component.topLevel.scrape,
         args,
         options,
       ),
@@ -978,7 +978,7 @@ export class SteelComponent {
     ) =>
       this.runAction<SteelComponentTopLevelArgs, unknown>(
         ctx,
-        this.component.steel.pdf,
+        this.component.topLevel.pdf,
         args,
         options,
       ),
